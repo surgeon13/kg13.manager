@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KG13 — Internal</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  :root {
+    --concrete:#1b1a17; --concrete-deep:#131210; --concrete-light:#262420; --concrete-lighter:#302d27;
+    --paper:#e9e4d8; --paper-dim:#a9a394; --paper-faint:#6b6659;
+    --amber:#d9a441; --amber-dim:#8a6b2f; --hazard:#b34a3a; --hazard-bright:#e2624a; --ok-green:#8fae6b; --line:#3a3630;
+    --btn-text:#1b1a17;
+  }
+  :root[data-theme="light"] {
+    --concrete:#f2ede2; --concrete-deep:#e7dfd0; --concrete-light:#e1d7c3; --concrete-lighter:#d6cab0;
+    --paper:#221f1a; --paper-dim:#5c5548; --paper-faint:#8a8270;
+    --amber:#b8792a; --amber-dim:#8a5f24; --hazard:#a8402f; --hazard-bright:#c94a35; --ok-green:#4f7a35; --line:#cfc3ab;
+    --btn-text:#1b1a17;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--concrete-deep); color:var(--paper); font-family:'JetBrains Mono',monospace; min-height:100vh; transition:background .2s ease, color .2s ease; }
+  .display { font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; }
+  ::-webkit-scrollbar{width:8px;height:8px;} ::-webkit-scrollbar-thumb{background:var(--line);}
+
+  .theme-toggle { background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:6px 10px; cursor:pointer; font-family:'Oswald',sans-serif; }
+  .theme-toggle:hover { border-color:var(--amber); color:var(--amber); }
+
+  #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:24px; padding:24px; position:relative; }
+  .brand-mark { display:flex; align-items:baseline; gap:10px; }
+  .brand-mark .num { font-family:'Oswald',sans-serif; font-size:60px; font-weight:700; color:var(--amber); }
+  .brand-mark .sub { font-size:11px; color:var(--paper-dim); letter-spacing:.25em; text-transform:uppercase; border-left:2px solid var(--hazard); padding-left:10px; }
+  .login-box { width:100%; max-width:340px; background:var(--concrete); border:1px solid var(--line); padding:26px; }
+  .field-label { font-size:10px; letter-spacing:.15em; color:var(--paper-dim); text-transform:uppercase; display:block; margin:14px 0 6px; }
+  .field-label:first-of-type{margin-top:0;}
+  input, select, textarea { width:100%; background:var(--concrete-deep); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:14px; }
+  input:focus, select:focus, textarea:focus { outline:1px solid var(--amber); border-color:var(--amber); }
+  .btn { width:100%; margin-top:18px; background:var(--amber); color:var(--btn-text); border:none; padding:11px; font-family:'Oswald',sans-serif; font-weight:600; letter-spacing:.1em; text-transform:uppercase; font-size:12px; cursor:pointer; }
+  .btn:hover{background:#eab85c;} .btn.small{width:auto; padding:7px 14px; margin-top:0; font-size:10px;}
+  .btn.ghost{background:transparent; border:1px solid var(--amber-dim); color:var(--amber);}
+  .btn.danger{background:var(--hazard); color:var(--paper);}
+  .toggle-mode { font-size:11px; color:var(--paper-dim); text-align:center; cursor:pointer; margin-top:14px; }
+  .toggle-mode:hover{color:var(--amber);}
+  .err-msg { font-size:11px; color:var(--hazard-bright); margin-top:10px; text-align:center; }
+  .login-note { font-size:10px; color:var(--paper-dim); text-align:center; max-width:320px; line-height:1.6; }
+
+  #app { display:none; min-height:100vh; flex-direction:column; }
+  #app.active{display:flex;}
+  header { border-bottom:1px solid var(--line); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; background:var(--concrete); gap:12px; flex-wrap:wrap; }
+  .header-left{display:flex; align-items:center; gap:14px;}
+  .header-left .num{font-family:'Oswald',sans-serif; font-weight:700; color:var(--amber); font-size:20px;}
+  .role-pill{font-size:9px; letter-spacing:.1em; padding:3px 8px; border:1px solid var(--amber-dim); color:var(--amber); text-transform:uppercase;}
+  .signout{font-size:10px; color:var(--paper-dim); letter-spacing:.1em; text-transform:uppercase; cursor:pointer; background:none; border:none; font-family:inherit;}
+  .signout:hover{color:var(--hazard-bright);}
+
+  nav { display:flex; border-bottom:1px solid var(--line); background:var(--concrete-deep); overflow-x:auto; }
+  .nav-item { padding:12px 18px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--paper-dim); cursor:pointer; border:none; border-right:1px solid var(--line); white-space:nowrap; background:none; font-family:'Oswald',sans-serif; font-weight:500; }
+  .nav-item.active{color:var(--amber); background:var(--concrete-light);}
+  .nav-item:hover:not(.active){color:var(--paper);}
+
+  main { flex:1; padding:20px; max-width:1150px; width:100%; margin:0 auto; }
+  .view{display:none;} .view.active{display:block;}
+  .view-title{font-size:22px; margin-bottom:4px;}
+  .view-sub{font-size:11px; color:var(--paper-dim); margin-bottom:18px;}
+  .view-header{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;}
+
+  .map-wrap { display:grid; grid-template-columns:1fr 300px; gap:16px; }
+  @media (max-width:760px){.map-wrap{grid-template-columns:1fr;}}
+  .map-frame { position:relative; aspect-ratio:4/3; border:1px solid var(--line); overflow:hidden; }
+  #leaflet-map { width:100%; height:100%; filter:saturate(.55) brightness(.75) contrast(1.05) sepia(.15); transition:filter .2s ease; }
+  :root[data-theme="light"] #leaflet-map { filter:saturate(.65) brightness(1.02) contrast(1) sepia(.05); }
+  .map-legend { position:absolute; top:10px; right:12px; font-size:9px; color:var(--paper); background:rgba(19,18,16,.85); padding:6px 10px; display:flex; gap:12px; z-index:500; border:1px solid var(--line); }
+  .dot{width:8px;height:8px;display:inline-block;} .dot.amber-dot{background:var(--amber);} .dot.hazard-dot{background:var(--hazard-bright);}
+  .map-side { border:1px solid var(--line); background:var(--concrete); padding:16px; font-size:12px; max-height:480px; overflow-y:auto; }
+  .map-side h3{font-family:'Oswald',sans-serif; font-size:15px; color:var(--amber); margin-bottom:10px;}
+  .map-side .empty{color:var(--paper-dim); font-size:11px; line-height:1.6;}
+  .side-row{display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line);}
+  .side-row:last-child{border-bottom:none;}
+  .side-label{color:var(--paper-dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; white-space:nowrap;}
+  .linked-block{margin-top:14px; padding-top:10px; border-top:1px dashed var(--line);}
+  .linked-block .lbl{font-size:9px; letter-spacing:.15em; color:var(--paper-dim); text-transform:uppercase; margin-bottom:6px;}
+  .chip{display:inline-block; font-size:10px; padding:3px 7px; background:var(--concrete-light); border:1px solid var(--line); margin:2px 4px 2px 0; cursor:pointer;}
+  .chip:hover{border-color:var(--amber);}
+  .badge-sensitive{display:inline-block; font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--hazard-bright); border:1px solid var(--hazard); padding:2px 6px; margin-top:6px;}
+
+  table{width:100%; border-collapse:collapse; font-size:12px;}
+  th{text-align:left; font-family:'Oswald',sans-serif; font-weight:500; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); padding:9px 10px; border-bottom:1px solid var(--amber-dim); position:sticky; top:0; background:var(--concrete-light);}
+  td{padding:9px 10px; border-bottom:1px solid var(--line);}
+  tr:hover td{background:var(--concrete-light);}
+  .status-tag{font-size:9px; padding:2px 6px; letter-spacing:.06em; text-transform:uppercase;}
+  .status-ok{color:var(--ok-green); border:1px solid #4a5c37;} .status-warn{color:var(--hazard-bright); border:1px solid var(--hazard);} .status-neutral{color:var(--paper-dim); border:1px solid var(--line);}
+  .table-wrap{border:1px solid var(--line); overflow:auto; max-height:480px;}
+  .cat-row td{background:var(--concrete-lighter); font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber-dim);}
+  .row-actions{display:flex; gap:6px;}
+  .icon-btn{background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:10px; padding:3px 7px; cursor:pointer; font-family:'JetBrains Mono',monospace;}
+  .icon-btn:hover{border-color:var(--amber); color:var(--amber);}
+  .icon-btn.danger:hover{border-color:var(--hazard-bright); color:var(--hazard-bright);}
+
+  .date-strip{display:flex; flex-wrap:wrap; gap:10px;}
+  .date-card{background:var(--concrete); border:1px solid var(--line); padding:14px 16px; min-width:170px; flex:1; position:relative;}
+  .date-card .dm{font-family:'Oswald',sans-serif; font-size:22px; color:var(--amber);}
+  .date-card .desc{font-size:11px; color:var(--paper-dim); margin-top:6px; line-height:1.4;}
+  .date-card .row-actions{margin-top:10px;}
+
+  #overlay{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; z-index:900;}
+  #overlay.active{display:block;}
+  #slideover{position:fixed; top:0; right:-420px; width:380px; max-width:92vw; height:100%; background:var(--concrete); border-left:1px solid var(--line); z-index:901; transition:right .25s ease; padding:20px; overflow-y:auto;}
+  #slideover.active{right:0;}
+  #slideover .close-btn{float:right; background:none; border:none; color:var(--paper-dim); font-size:18px; cursor:pointer;}
+  #slideover h2{font-family:'Oswald',sans-serif; font-size:19px; color:var(--amber); clear:both; padding-top:6px; margin-bottom:14px;}
+  .form-row{margin-bottom:12px;}
+  .form-actions{display:flex; gap:8px; margin-top:18px;}
+  .loading{color:var(--paper-dim); font-size:11px; padding:20px; text-align:center;}
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--concrete); border:1px solid var(--amber); color:var(--paper); padding:10px 18px; font-size:12px; z-index:1000; display:none;}
+  .toast.error{border-color:var(--hazard-bright);}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <button class="theme-toggle" id="theme-toggle-login" onclick="toggleTheme()" style="position:absolute; top:16px; right:16px;">☾ Dark</button>
+  <div class="brand-mark"><span class="num display">KG13</span><span class="sub">internal · members only</span></div>
+  <div class="login-box">
+    <div id="auth-error" class="err-msg" style="display:none;"></div>
+    <label class="field-label">Email</label>
+    <input type="email" id="login-email" placeholder="you@kg13tlv.com">
+    <label class="field-label">Password</label>
+    <input type="password" id="login-pass" placeholder="••••••••">
+    <button class="btn" id="auth-submit-btn" onclick="handleAuthSubmit()">Sign in</button>
+  </div>
+  <div class="toggle-mode" id="toggle-auth-mode" onclick="toggleAuthMode()">New here? Create an account</div>
+  <p class="login-note">New accounts default to <b>Member</b> role. A Core Crew member needs to promote you in Supabase → profiles table.</p>
+</div>
+
+<div id="app">
+  <header>
+    <div class="header-left">
+      <span class="num display">KG13</span>
+      <span class="role-pill" id="role-pill">—</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <button class="theme-toggle" id="theme-toggle-app" onclick="toggleTheme()">☾ Dark</button>
+      <button class="signout" onclick="signOut()">Sign out</button>
+    </div>
+  </header>
+  <nav>
+    <button class="nav-item active" data-view="map">Map</button>
+    <button class="nav-item" data-view="locations">Locations</button>
+    <button class="nav-item" data-view="people">People</button>
+    <button class="nav-item" data-view="dates">Dates</button>
+    <button class="nav-item" data-view="gear">Gear</button>
+  </nav>
+  <main>
+    <section class="view active" id="view-map">
+      <div class="view-title display">Location Map</div>
+      <div class="view-sub">Live OpenStreetMap · tap a marker for details</div>
+      <div class="map-wrap">
+        <div class="map-frame">
+          <div class="map-legend"><span><i class="dot amber-dot"></i>Active</span><span><i class="dot hazard-dot"></i>Sensitive</span></div>
+          <div id="leaflet-map"></div>
+        </div>
+        <div class="map-side" id="map-side"><h3>Select a marker</h3><p class="empty">Loading locations…</p></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-locations">
+      <div class="view-header"><div><div class="view-title display">Locations</div><div class="view-sub" id="loc-count">Loading…</div></div>
+        <button class="btn small" id="loc-add-btn" onclick="openLocationForm()" style="display:none;">+ Add Location</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Description</th><th>Capacity</th><th>Status</th><th></th></tr></thead><tbody id="locations-table"></tbody></table></div>
+    </section>
+
+    <section class="view" id="view-people">
+      <div class="view-header"><div><div class="view-title display">People</div><div class="view-sub" id="people-count">Loading…</div></div>
+        <button class="btn small" id="people-add-btn" onclick="openPersonForm()" style="display:none;">+ Add Person</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Nationality</th><th>Contact</th><th></th></tr></thead><tbody id="people-table"></tbody></table></div>
+    </section>
+
+    <section class="view" id="view-dates">
+      <div class="view-header"><div><div class="view-title display">Fixed Dates</div><div class="view-sub">Recurring annually — day &amp; month</div></div>
+        <button class="btn small" onclick="openDateForm()">+ Add Date</button></div>
+      <div class="date-strip" id="dates-strip"></div>
+    </section>
+
+    <section class="view" id="view-gear">
+      <div class="view-header"><div><div class="view-title display">Gear</div><div class="view-sub" id="gear-count">Loading…</div></div>
+        <button class="btn small" onclick="openGearForm()">+ Add Gear</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Detail</th><th>Qty</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody id="gear-table"></tbody></table></div>
+    </section>
+  </main>
+</div>
+
+<div id="overlay" onclick="closeSlideover()"></div>
+<div id="slideover"><button class="close-btn" onclick="closeSlideover()">✕</button><div id="slideover-content"></div></div>
+<div id="toast" class="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ============ SUPABASE CONFIG ============
+const SUPABASE_URL = "https://ejoicnbmtzthpnckfnao.supabase.co";
+const SUPABASE_KEY = "sb_publishable_FPXt5zqgK9vJMlM8ogoIQg_2e7Mj-GS";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentProfile = null;
+let authMode = 'signin'; // 'signin' | 'signup'
+let map, mapMarkers = [];
+let cache = { locations: [], people: [], gear: [], dates: [], history: [] };
+
+// ============ AUTH ============
+function toggleAuthMode() {
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  document.getElementById('auth-submit-btn').textContent = authMode === 'signin' ? 'Sign in' : 'Create account';
+  document.getElementById('toggle-auth-mode').textContent = authMode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in';
+}
+
+async function handleAuthSubmit() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.style.display = 'none';
+  if (!email || !password) { showAuthError('Email and password required.'); return; }
+
+  try {
+    if (authMode === 'signin') {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } else {
+      const { error } = await sb.auth.signUp({ email, password });
+      if (error) throw error;
+      showAuthError('Account created. Check your email if confirmation is required, then sign in.', false);
+      authMode = 'signin';
+      return;
+    }
+  } catch (e) {
+    showAuthError(e.message || 'Authentication failed.');
+  }
+}
+
+function showAuthError(msg, isError = true) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--hazard-bright)' : 'var(--ok-green)';
+  el.style.display = 'block';
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function initAuthListener() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await onSignedIn(session);
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) await onSignedIn(session);
+    if (event === 'SIGNED_OUT') {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app').classList.remove('active');
+    }
+  });
+}
+
+async function onSignedIn(session) {
+  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+  if (error) { showAuthError('Could not load profile: ' + error.message); return; }
+  currentProfile = profile;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  document.getElementById('role-pill').textContent = profile.role === 'core' ? 'CORE CREW' : 'MEMBER';
+  document.getElementById('loc-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
+  document.getElementById('people-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
+  await loadAll();
+}
+
+// ============ NAV ============
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'map' && map) setTimeout(() => map.invalidateSize(), 50);
+  });
+});
+
+// ============ DATA LOADING ============
+async function loadAll() {
+  const [locRes, peopleRes, gearRes, datesRes] = await Promise.all([
+    sb.from('locations').select('*').order('name'),
+    sb.from('people').select('*').order('name'),
+    sb.from('gear').select('*').order('category'),
+    sb.from('event_dates').select('*').order('month').order('day'),
+  ]);
+  cache.locations = locRes.data || [];
+  cache.people = peopleRes.data || [];
+  cache.gear = gearRes.data || [];
+  cache.dates = datesRes.data || [];
+  renderLocationsTable();
+  renderPeopleTable();
+  renderGearTable();
+  renderDates();
+  initMapIfNeeded();
+  refreshMapMarkers();
+}
+
+function toast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function locName(id) { const l = cache.locations.find(x => x.id === id); return l ? l.name : '—'; }
+
+// ============ MAP ============
+function initMapIfNeeded() {
+  if (map) return;
+  map = L.map('leaflet-map').setView([32.0575, 34.7650], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+}
+
+function refreshMapMarkers() {
+  if (!map) return;
+  mapMarkers.forEach(m => map.removeLayer(m));
+  mapMarkers = [];
+  cache.locations.filter(l => l.lat !== null && l.lng !== null).forEach(loc => {
+    const color = loc.status === 'sensitive' ? '#e2624a' : '#d9a441';
+    const icon = L.divIcon({
+      className: '', iconSize: [16, 16], iconAnchor: [8, 16],
+      html: `<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid ${color};"></div>`
+    });
+    const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map);
+    marker.bindTooltip(loc.name, { direction: 'top', offset: [0, -12] });
+    marker.on('click', () => selectLocationOnMap(loc.id));
+    mapMarkers.push(marker);
+  });
+}
+
+function selectLocationOnMap(id) {
+  const loc = cache.locations.find(l => l.id === id);
+  if (!loc) return;
+  const linkedPeople = cache.people.filter(p => p.location_id === id);
+  const linkedGear = cache.gear.filter(g => g.location_id === id);
+  const linkedDates = cache.dates.filter(d => d.location_id === id);
+  document.getElementById('map-side').innerHTML = `
+    <h3>${loc.name}</h3>
+    ${loc.status === 'sensitive' ? '<span class="badge-sensitive">Sensitive</span>' : ''}
+    <div class="side-row"><span class="side-label">Capacity</span><span>${loc.capacity || '—'}</span></div>
+    <div class="side-row"><span class="side-label">Notes</span><span>${loc.description || '—'}</span></div>
+    <div class="linked-block"><div class="lbl">People</div>${linkedPeople.length ? linkedPeople.map(p => `<span class="chip">${p.name}</span>`).join('') : '<span class="empty">None</span>'}</div>
+    <div class="linked-block"><div class="lbl">Gear</div>${linkedGear.length ? linkedGear.map(g => `<span class="chip">${g.item} ×${g.qty}</span>`).join('') : '<span class="empty">None</span>'}</div>
+    <div class="linked-block"><div class="lbl">Dates</div>${linkedDates.length ? linkedDates.map(d => `<span class="chip">${String(d.day).padStart(2,'0')}.${String(d.month).padStart(2,'0')} — ${d.description}</span>`).join('') : '<span class="empty">None</span>'}</div>
+  `;
+}
+
+// ============ LOCATIONS ============
+function renderLocationsTable() {
+  document.getElementById('loc-count').textContent = cache.locations.length + ' sites on record';
+  const canEdit = currentProfile?.role === 'core';
+  document.getElementById('locations-table').innerHTML = cache.locations.map(l => `
+    <tr><td>${l.name}</td><td>${l.description || ''}</td><td>${l.capacity || '—'}</td>
+    <td><span class="status-tag ${l.status === 'sensitive' ? 'status-warn' : 'status-ok'}">${l.status === 'sensitive' ? 'Sensitive' : 'Active'}</span></td>
+    <td>${canEdit ? `<div class="row-actions"><button class="icon-btn" onclick='openLocationForm(${JSON.stringify(l.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteLocation(${JSON.stringify(l.id)})'>Del</button></div>` : ''}</td></tr>`).join('');
+}
+
+function openLocationForm(id) {
+  const loc = id ? cache.locations.find(l => l.id === id) : null;
+  showSlideover(`
+    <h2>${loc ? 'Edit' : 'Add'} Location</h2>
+    <div class="form-row"><label class="field-label">Name</label><input id="f-name" value="${loc?.name || ''}"></div>
+    <div class="form-row"><label class="field-label">Description</label><textarea id="f-desc" rows="3">${loc?.description || ''}</textarea></div>
+    <div class="form-row"><label class="field-label">Capacity</label><input id="f-cap" value="${loc?.capacity || ''}"></div>
+    <div class="form-row"><label class="field-label">Contact</label><input id="f-contact" value="${loc?.contact || ''}"></div>
+    <div class="form-row"><label class="field-label">Latitude</label><input id="f-lat" value="${loc?.lat ?? ''}" placeholder="32.0558"></div>
+    <div class="form-row"><label class="field-label">Longitude</label><input id="f-lng" value="${loc?.lng ?? ''}" placeholder="34.7698"></div>
+    <div class="form-row"><label class="field-label">Status</label>
+      <select id="f-status"><option value="active" ${loc?.status==='active'?'selected':''}>Active</option><option value="sensitive" ${loc?.status==='sensitive'?'selected':''}>Sensitive</option></select></div>
+    <div class="form-actions"><button class="btn" onclick='saveLocation(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+async function saveLocation(id) {
+  const payload = {
+    name: document.getElementById('f-name').value.trim(),
+    description: document.getElementById('f-desc').value.trim() || null,
+    capacity: document.getElementById('f-cap').value.trim() || null,
+    contact: document.getElementById('f-contact').value.trim() || null,
+    lat: document.getElementById('f-lat').value ? parseFloat(document.getElementById('f-lat').value) : null,
+    lng: document.getElementById('f-lng').value ? parseFloat(document.getElementById('f-lng').value) : null,
+    status: document.getElementById('f-status').value,
+  };
+  if (!payload.name) { toast('Name is required', true); return; }
+  const { error } = id ? await sb.from('locations').update(payload).eq('id', id) : await sb.from('locations').insert(payload);
+  if (error) { toast(error.message, true); return; }
+  toast('Location saved');
+  closeSlideover();
+  await loadAll();
+}
+
+async function deleteLocation(id) {
+  if (!confirm('Delete this location? This cannot be undone.')) return;
+  const { error } = await sb.from('locations').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Location deleted');
+  await loadAll();
+}
+
+// ============ PEOPLE ============
+function renderPeopleTable() {
+  document.getElementById('people-count').textContent = cache.people.length + ' on record';
+  const canEdit = currentProfile?.role === 'core';
+  document.getElementById('people-table').innerHTML = cache.people.map(p => `
+    <tr><td>${p.name}</td><td>${p.role || ''}${p.tag ? ' · ' + p.tag : ''}</td><td>${p.nationality || '—'}</td><td>${p.contact || '—'}</td>
+    <td>${canEdit ? `<div class="row-actions"><button class="icon-btn" onclick='openPersonForm(${JSON.stringify(p.id)})'>Edit</button><button class="icon-btn danger" onclick='deletePerson(${JSON.stringify(p.id)})'>Del</button></div>` : ''}</td></tr>`).join('');
+}
+
+function openPersonForm(id) {
+  const p = id ? cache.people.find(x => x.id === id) : null;
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${p?.location_id===l.id?'selected':''}>${l.name}</option>`).join('');
+  showSlideover(`
+    <h2>${p ? 'Edit' : 'Add'} Person</h2>
+    <div class="form-row"><label class="field-label">Name</label><input id="f-name" value="${p?.name || ''}"></div>
+    <div class="form-row"><label class="field-label">Role</label><input id="f-role" value="${p?.role || ''}" placeholder="Crew / Lineup / Ally / Org"></div>
+    <div class="form-row"><label class="field-label">Tag</label><input id="f-tag" value="${p?.tag || ''}"></div>
+    <div class="form-row"><label class="field-label">Nationality</label><input id="f-nat" value="${p?.nationality || ''}"></div>
+    <div class="form-row"><label class="field-label">Contact</label><input id="f-contact" value="${p?.contact || ''}"></div>
+    <div class="form-row"><label class="field-label">Based at</label><select id="f-loc"><option value="">—</option>${locOptions}</select></div>
+    <div class="form-actions"><button class="btn" onclick='savePerson(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+async function savePerson(id) {
+  const payload = {
+    name: document.getElementById('f-name').value.trim(),
+    role: document.getElementById('f-role').value.trim() || null,
+    tag: document.getElementById('f-tag').value.trim() || null,
+    nationality: document.getElementById('f-nat').value.trim() || null,
+    contact: document.getElementById('f-contact').value.trim() || null,
+    location_id: document.getElementById('f-loc').value || null,
+  };
+  if (!payload.name) { toast('Name is required', true); return; }
+  const { error } = id ? await sb.from('people').update(payload).eq('id', id) : await sb.from('people').insert(payload);
+  if (error) { toast(error.message, true); return; }
+  toast('Person saved');
+  closeSlideover();
+  await loadAll();
+}
+
+async function deletePerson(id) {
+  if (!confirm('Delete this person? This cannot be undone.')) return;
+  const { error } = await sb.from('people').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Person deleted');
+  await loadAll();
+}
+
+// ============ GEAR ============
+function renderGearTable() {
+  document.getElementById('gear-count').textContent = cache.gear.length + ' items';
+  let html = ''; let lastCat = null;
+  cache.gear.forEach(g => {
+    if (g.category !== lastCat) { html += `<tr class="cat-row"><td colspan="6">${g.category || 'Uncategorized'}</td></tr>`; lastCat = g.category; }
+    html += `<tr><td>${g.item}</td><td>${g.detail || ''}</td><td>${g.qty ?? ''}</td><td>${locName(g.location_id)}</td>
+      <td><span class="status-tag ${g.status === 'warn' ? 'status-warn' : g.status === 'neutral' ? 'status-neutral' : 'status-ok'}">${g.status === 'warn' ? 'Flagged' : g.status === 'neutral' ? '—' : 'Working'}</span></td>
+      <td><div class="row-actions"><button class="icon-btn" onclick='openGearForm(${JSON.stringify(g.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteGear(${JSON.stringify(g.id)})'>Del</button></div></td></tr>`;
+  });
+  document.getElementById('gear-table').innerHTML = html;
+}
+
+function openGearForm(id) {
+  const g = id ? cache.gear.find(x => x.id === id) : null;
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${g?.location_id===l.id?'selected':''}>${l.name}</option>`).join('');
+  showSlideover(`
+    <h2>${g ? 'Edit' : 'Add'} Gear</h2>
+    <div class="form-row"><label class="field-label">Item</label><input id="f-item" value="${g?.item || ''}"></div>
+    <div class="form-row"><label class="field-label">Detail</label><input id="f-detail" value="${g?.detail || ''}"></div>
+    <div class="form-row"><label class="field-label">Category</label><input id="f-cat" value="${g?.category || ''}"></div>
+    <div class="form-row"><label class="field-label">Qty</label><input id="f-qty" type="number" value="${g?.qty ?? 1}"></div>
+    <div class="form-row"><label class="field-label">Location</label><select id="f-loc"><option value="">—</option>${locOptions}</select></div>
+    <div class="form-row"><label class="field-label">Status</label>
+      <select id="f-status"><option value="ok" ${g?.status==='ok'?'selected':''}>Working</option><option value="warn" ${g?.status==='warn'?'selected':''}>Flagged</option><option value="neutral" ${g?.status==='neutral'?'selected':''}>—</option></select></div>
+    <div class="form-row"><label class="field-label">Note</label><input id="f-note" value="${g?.note || ''}"></div>
+    <div class="form-actions"><button class="btn" onclick='saveGear(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+async function saveGear(id) {
+  const newLocId = document.getElementById('f-loc').value || null;
+  const payload = {
+    item: document.getElementById('f-item').value.trim(),
+    detail: document.getElementById('f-detail').value.trim() || null,
+    category: document.getElementById('f-cat').value.trim() || null,
+    qty: parseInt(document.getElementById('f-qty').value) || 1,
+    location_id: newLocId,
+    status: document.getElementById('f-status').value,
+    note: document.getElementById('f-note').value.trim() || null,
+  };
+  if (!payload.item) { toast('Item name is required', true); return; }
+
+  const existing = id ? cache.gear.find(x => x.id === id) : null;
+  const { error } = id ? await sb.from('gear').update(payload).eq('id', id) : await sb.from('gear').insert(payload);
+  if (error) { toast(error.message, true); return; }
+
+  // Log a history entry if location changed (or new item created with a location)
+  if (!existing || existing.location_id !== newLocId) {
+    const gearId = id || (await sb.from('gear').select('id').eq('item', payload.item).order('created_at', {ascending:false}).limit(1).single()).data?.id;
+    if (gearId) {
+      await sb.from('gear_location_history').insert({ gear_id: gearId, location_id: newLocId, note: 'Updated via app' });
+    }
+  }
+  toast('Gear saved');
+  closeSlideover();
+  await loadAll();
+}
+
+async function deleteGear(id) {
+  if (!confirm('Delete this gear item? This cannot be undone.')) return;
+  const { error } = await sb.from('gear').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Gear deleted');
+  await loadAll();
+}
+
+// ============ DATES ============
+function renderDates() {
+  document.getElementById('dates-strip').innerHTML = cache.dates.map(d => `
+    <div class="date-card">
+      <div class="dm display">${String(d.day).padStart(2,'0')}.${String(d.month).padStart(2,'0')}</div>
+      <div class="desc">${d.description || ''}</div>
+      ${d.location_id ? `<div class="desc" style="color:var(--amber-dim);">@ ${locName(d.location_id)}</div>` : ''}
+      <div class="row-actions"><button class="icon-btn" onclick='openDateForm(${JSON.stringify(d.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteDate(${JSON.stringify(d.id)})'>Del</button></div>
+    </div>`).join('');
+}
+
+function openDateForm(id) {
+  const d = id ? cache.dates.find(x => x.id === id) : null;
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${d?.location_id===l.id?'selected':''}>${l.name}</option>`).join('');
+  showSlideover(`
+    <h2>${d ? 'Edit' : 'Add'} Date</h2>
+    <div class="form-row"><label class="field-label">Day</label><input id="f-day" type="number" min="1" max="31" value="${d?.day || ''}"></div>
+    <div class="form-row"><label class="field-label">Month</label><input id="f-month" type="number" min="1" max="12" value="${d?.month || ''}"></div>
+    <div class="form-row"><label class="field-label">Description</label><input id="f-desc" value="${d?.description || ''}"></div>
+    <div class="form-row"><label class="field-label">Location (optional)</label><select id="f-loc"><option value="">—</option>${locOptions}</select></div>
+    <div class="form-actions"><button class="btn" onclick='saveDate(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+async function saveDate(id) {
+  const payload = {
+    day: parseInt(document.getElementById('f-day').value),
+    month: parseInt(document.getElementById('f-month').value),
+    description: document.getElementById('f-desc').value.trim() || null,
+    location_id: document.getElementById('f-loc').value || null,
+  };
+  if (!payload.day || !payload.month) { toast('Day and month are required', true); return; }
+  const { error } = id ? await sb.from('event_dates').update(payload).eq('id', id) : await sb.from('event_dates').insert(payload);
+  if (error) { toast(error.message, true); return; }
+  toast('Date saved');
+  closeSlideover();
+  await loadAll();
+}
+
+async function deleteDate(id) {
+  if (!confirm('Delete this date? This cannot be undone.')) return;
+  const { error } = await sb.from('event_dates').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Date deleted');
+  await loadAll();
+}
+
+// ============ SLIDEOVER ============
+function showSlideover(html) {
+  document.getElementById('slideover-content').innerHTML = html;
+  document.getElementById('overlay').classList.add('active');
+  document.getElementById('slideover').classList.add('active');
+}
+function closeSlideover() {
+  document.getElementById('overlay').classList.remove('active');
+  document.getElementById('slideover').classList.remove('active');
+}
+
+// ============ THEME ============
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const label = theme === 'light' ? '☀ Light' : '☾ Dark';
+  const loginBtn = document.getElementById('theme-toggle-login');
+  const appBtn = document.getElementById('theme-toggle-app');
+  if (loginBtn) loginBtn.textContent = label;
+  if (appBtn) appBtn.textContent = label;
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('kg13-theme', next); } catch (e) { /* storage unavailable, theme just won't persist */ }
+  applyTheme(next);
+}
+
+function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('kg13-theme'); } catch (e) { /* storage unavailable */ }
+  const preferred = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  applyTheme(preferred);
+}
+
+initTheme();
+initAuthListener();
+</script>
+</body>
+</html>
