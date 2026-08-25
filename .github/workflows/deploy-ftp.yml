@@ -1,0 +1,36 @@
+name: Deploy to Namecheap (FTP)
+
+# Uploads index.html to admin.kg13tlv.com via FTP on every push to main.
+# No build step -- this app is a single static file that talks directly to
+# Supabase from the browser.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   ADMIN_FTP_SERVER    e.g. premium242.web-hosting.com
+#   ADMIN_FTP_USERNAME  the FTP account scoped to admin.kg13tlv.com
+#   ADMIN_FTP_PASSWORD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Namecheap via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.ADMIN_FTP_SERVER }}
+          username: ${{ secrets.ADMIN_FTP_USERNAME }}
+          password: ${{ secrets.ADMIN_FTP_PASSWORD }}
+          local-dir: ./
+          server-dir: ./
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/README.md
