@@ -68,13 +68,36 @@
   .map-wrap { display:grid; grid-template-columns:1fr 300px; gap:16px; }
   @media (max-width:760px){.map-wrap{grid-template-columns:1fr;}}
   .map-frame { position:relative; aspect-ratio:4/3; border:1px solid var(--line); overflow:hidden; }
-  #leaflet-map { width:100%; height:100%; filter:saturate(.55) brightness(.75) contrast(1.05) sepia(.15); transition:filter .2s ease; }
-  :root[data-theme="light"] #leaflet-map { filter:saturate(.65) brightness(1.02) contrast(1) sepia(.05); }
+  #leaflet-map { width:100%; height:100%; background:var(--concrete-deep); }
+  .leaflet-container { background:var(--concrete-deep) !important; font-family:'JetBrains Mono',monospace; }
+  .leaflet-control-attribution { font-size:9px !important; }
+  .kg-pin { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:'Oswald',sans-serif; font-size:11px; font-weight:600; line-height:1; color:#1b1a17;
+    background:var(--amber); border:2px solid rgba(0,0,0,.5);
+    box-shadow:0 0 0 3px rgba(217,164,65,.25), 0 2px 6px rgba(0,0,0,.55); }
+  .kg-pin.sensitive { background:var(--hazard-bright);
+    box-shadow:0 0 0 3px rgba(226,98,74,.28), 0 2px 6px rgba(0,0,0,.55); }
+  .kg-pin.is-selected { outline:2px solid var(--paper); outline-offset:2px; }
   .map-legend { position:absolute; top:10px; right:12px; font-size:9px; color:var(--paper); background:rgba(19,18,16,.85); padding:6px 10px; display:flex; gap:12px; z-index:500; border:1px solid var(--line); }
   .dot{width:8px;height:8px;display:inline-block;} .dot.amber-dot{background:var(--amber);} .dot.hazard-dot{background:var(--hazard-bright);}
   .map-side { border:1px solid var(--line); background:var(--concrete); padding:16px; font-size:12px; max-height:480px; overflow-y:auto; }
   .map-side h3{font-family:'Oswald',sans-serif; font-size:15px; color:var(--amber); margin-bottom:10px;}
   .map-side .empty{color:var(--paper-dim); font-size:11px; line-height:1.6;}
+  .link-icons { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .link-icon { display:inline-flex; width:20px; height:20px; align-items:center; justify-content:center;
+    border:1px solid var(--line); border-radius:50%; color:var(--paper-dim); text-decoration:none; flex:0 0 auto; }
+  .link-icon:hover { color:var(--amber); border-color:var(--amber); }
+  .link-icon svg { width:11px; height:11px; fill:currentColor; display:block; }
+  .map-loc { display:block; width:100%; text-align:left; background:none; border:0; border-bottom:1px solid var(--line);
+    padding:9px 2px; cursor:pointer; color:var(--paper); font-family:'JetBrains Mono',monospace; }
+  .map-loc:hover { background:var(--concrete-light); }
+  .map-loc.active { background:var(--concrete-light); box-shadow:inset 2px 0 0 var(--amber); }
+  .map-loc-name { display:block; font-size:12px; }
+  .map-loc-meta { display:block; font-size:10px; color:var(--paper-dim); margin-top:3px; }
+  .map-loc-meta .warn { color:var(--hazard-bright); }
+  .map-back { background:none; border:0; color:var(--amber); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+    font-family:'Oswald',sans-serif; cursor:pointer; padding:0 0 10px; }
+  .map-back:hover { text-decoration:underline; }
   .side-row{display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line);}
   .side-row:last-child{border-bottom:none;}
   .side-label{color:var(--paper-dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; white-space:nowrap;}
@@ -84,13 +107,13 @@
   .chip:hover{border-color:var(--amber);}
   .badge-sensitive{display:inline-block; font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--hazard-bright); border:1px solid var(--hazard); padding:2px 6px; margin-top:6px;}
 
-  table{width:100%; border-collapse:collapse; font-size:12px;}
-  th{text-align:left; font-family:'Oswald',sans-serif; font-weight:500; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); padding:9px 10px; border-bottom:1px solid var(--amber-dim); position:sticky; top:0; background:var(--concrete-light);}
+  table{width:100%; min-width:760px; border-collapse:collapse; font-size:12px;}
+  th{text-align:left; font-family:'Oswald',sans-serif; font-weight:500; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); padding:9px 10px; border-bottom:1px solid var(--amber-dim); position:sticky; top:0; z-index:2; background:var(--concrete-light); white-space:nowrap;}
   td{padding:9px 10px; border-bottom:1px solid var(--line);}
   tr:hover td{background:var(--concrete-light);}
   .status-tag{font-size:9px; padding:2px 6px; letter-spacing:.06em; text-transform:uppercase;}
   .status-ok{color:var(--ok-green); border:1px solid #4a5c37;} .status-warn{color:var(--hazard-bright); border:1px solid var(--hazard);} .status-neutral{color:var(--paper-dim); border:1px solid var(--line);}
-  .table-wrap{border:1px solid var(--line); overflow:auto; max-height:480px;}
+  .table-wrap{border:1px solid var(--line); overflow:auto; max-height:min(68vh, 640px); -webkit-overflow-scrolling:touch;}
   .cat-row td{background:var(--concrete-lighter); font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber-dim);}
   .row-actions{display:flex; gap:6px;}
   .icon-btn{background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:10px; padding:3px 7px; cursor:pointer; font-family:'JetBrains Mono',monospace;}
@@ -154,7 +177,7 @@
   <main>
     <section class="view active" id="view-map">
       <div class="view-title display">Location Map</div>
-      <div class="view-sub">Live OpenStreetMap · tap a marker for details</div>
+      <div class="view-sub">Pin numbers show gear count · tap a pin or a name for details</div>
       <div class="map-wrap">
         <div class="map-frame">
           <div class="map-legend"><span><i class="dot amber-dot"></i>Active</span><span><i class="dot hazard-dot"></i>Sensitive</span></div>
@@ -167,13 +190,13 @@
     <section class="view" id="view-locations">
       <div class="view-header"><div><div class="view-title display">Locations</div><div class="view-sub" id="loc-count">Loading…</div></div>
         <button class="btn small" id="loc-add-btn" onclick="openLocationForm()" style="display:none;">+ Add Location</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Description</th><th>Capacity</th><th>Status</th><th></th></tr></thead><tbody id="locations-table"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Address</th><th>Description</th><th>Capacity</th><th>Status</th><th></th></tr></thead><tbody id="locations-table"></tbody></table></div>
     </section>
 
     <section class="view" id="view-people">
       <div class="view-header"><div><div class="view-title display">People</div><div class="view-sub" id="people-count">Loading…</div></div>
         <button class="btn small" id="people-add-btn" onclick="openPersonForm()" style="display:none;">+ Add Person</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Nationality</th><th>Contact</th><th></th></tr></thead><tbody id="people-table"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Nationality</th><th>Contact</th><th>Links</th><th></th></tr></thead><tbody id="people-table"></tbody></table></div>
     </section>
 
     <section class="view" id="view-dates">
@@ -316,29 +339,90 @@ function toast(msg, isError = false) {
 function locName(id) { const l = cache.locations.find(x => x.id === id); return l ? l.name : '—'; }
 
 // ============ MAP ============
+let kgTiles = null;
+let mapFitted = false;
+
+function tileUrlForTheme() {
+  const light = document.documentElement.getAttribute('data-theme') === 'light';
+  return 'https://{s}.basemaps.cartocdn.com/' + (light ? 'light_all' : 'dark_all') + '/{z}/{x}/{y}{r}.png';
+}
+
 function initMapIfNeeded() {
   if (map) return;
-  map = L.map('leaflet-map').setView([32.0575, 34.7650], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '© OpenStreetMap contributors'
+  map = L.map('leaflet-map', { scrollWheelZoom: false }).setView([32.0575, 34.7650], 13);
+  kgTiles = L.tileLayer(tileUrlForTheme(), {
+    maxZoom: 20, subdomains: 'abcd',
+    attribution: '© OpenStreetMap · © CARTO'
   }).addTo(map);
+}
+
+// Swap basemap when the light/dark toggle is used.
+function refreshMapTiles() {
+  if (!map || !kgTiles) return;
+  kgTiles.setUrl(tileUrlForTheme());
+}
+
+function locStats(id) {
+  return {
+    gear: cache.gear.filter(g => g.location_id === id).length,
+    people: cache.people.filter(p => p.location_id === id).length,
+    dates: cache.dates.filter(d => d.location_id === id).length,
+  };
 }
 
 function refreshMapMarkers() {
   if (!map) return;
   mapMarkers.forEach(m => map.removeLayer(m));
   mapMarkers = [];
+  const points = [];
   cache.locations.filter(l => l.lat !== null && l.lng !== null).forEach(loc => {
-    const color = loc.status === 'sensitive' ? '#e2624a' : '#d9a441';
+    const stats = locStats(loc.id);
     const icon = L.divIcon({
-      className: '', iconSize: [16, 16], iconAnchor: [8, 16],
-      html: `<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid ${color};"></div>`
+      className: '', iconSize: [26, 26], iconAnchor: [13, 13],
+      html: `<div class="kg-pin ${loc.status === 'sensitive' ? 'sensitive' : ''}" data-loc="${loc.id}">${stats.gear || ''}</div>`
     });
     const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map);
-    marker.bindTooltip(loc.name, { direction: 'top', offset: [0, -12] });
+    marker.bindTooltip(`${loc.name} — ${stats.gear} gear`, { direction: 'top', offset: [0, -16] });
     marker.on('click', () => selectLocationOnMap(loc.id));
+    marker.kgLocId = loc.id;
     mapMarkers.push(marker);
+    points.push([loc.lat, loc.lng]);
   });
+  if (points.length && !mapFitted) {
+    map.fitBounds(L.latLngBounds(points).pad(0.35), { maxZoom: 16 });
+    mapFitted = true;
+  }
+  renderMapSideList();
+}
+
+function highlightPin(id) {
+  document.querySelectorAll('.kg-pin').forEach(el => {
+    el.classList.toggle('is-selected', el.dataset.loc === id);
+  });
+}
+
+// Default side-panel view: every location, including ones with no coordinates
+// (those have no pin, so the list is the only place they show up).
+function renderMapSideList() {
+  const el = document.getElementById('map-side');
+  if (!el) return;
+  if (!cache.locations.length) {
+    el.innerHTML = '<h3>Locations</h3><p class="empty">No locations yet.</p>';
+    return;
+  }
+  const rows = cache.locations.map(loc => {
+    const stats = locStats(loc.id);
+    const unmapped = loc.lat === null || loc.lng === null;
+    const bits = [`${stats.gear} gear`, `${stats.people} people`];
+    if (stats.dates) bits.push(`${stats.dates} dates`);
+    if (unmapped) bits.push('<span class="warn">no coordinates</span>');
+    return `<button class="map-loc" onclick="selectLocationOnMap('${loc.id}')">
+      <span class="map-loc-name">${loc.name}${loc.status === 'sensitive' ? ' <i class="dot hazard-dot"></i>' : ''}</span>
+      <span class="map-loc-meta">${bits.join(' · ')}</span>
+    </button>`;
+  }).join('');
+  el.innerHTML = `<h3>Locations (${cache.locations.length})</h3>${rows}`;
+  highlightPin(null);
 }
 
 function selectLocationOnMap(id) {
@@ -347,15 +431,21 @@ function selectLocationOnMap(id) {
   const linkedPeople = cache.people.filter(p => p.location_id === id);
   const linkedGear = cache.gear.filter(g => g.location_id === id);
   const linkedDates = cache.dates.filter(d => d.location_id === id);
+  if (loc.lat !== null && loc.lng !== null && map) {
+    map.panTo([loc.lat, loc.lng]);
+  }
   document.getElementById('map-side').innerHTML = `
+    <button class="map-back" onclick="renderMapSideList()">← All locations</button>
     <h3>${loc.name}</h3>
     ${loc.status === 'sensitive' ? '<span class="badge-sensitive">Sensitive</span>' : ''}
+    <div class="side-row"><span class="side-label">Address</span><span>${loc.address || '—'}</span></div>
     <div class="side-row"><span class="side-label">Capacity</span><span>${loc.capacity || '—'}</span></div>
     <div class="side-row"><span class="side-label">Notes</span><span>${loc.description || '—'}</span></div>
     <div class="linked-block"><div class="lbl">People</div>${linkedPeople.length ? linkedPeople.map(p => `<span class="chip">${p.name}</span>`).join('') : '<span class="empty">None</span>'}</div>
     <div class="linked-block"><div class="lbl">Gear</div>${linkedGear.length ? linkedGear.map(g => `<span class="chip">${g.item} ×${g.qty}</span>`).join('') : '<span class="empty">None</span>'}</div>
     <div class="linked-block"><div class="lbl">Dates</div>${linkedDates.length ? linkedDates.map(d => `<span class="chip">${String(d.day).padStart(2,'0')}.${String(d.month).padStart(2,'0')} — ${d.description}</span>`).join('') : '<span class="empty">None</span>'}</div>
   `;
+  highlightPin(id);
 }
 
 // ============ LOCATIONS ============
@@ -363,7 +453,7 @@ function renderLocationsTable() {
   document.getElementById('loc-count').textContent = cache.locations.length + ' sites on record';
   const canEdit = currentProfile?.role === 'core';
   document.getElementById('locations-table').innerHTML = cache.locations.map(l => `
-    <tr><td>${l.name}</td><td>${l.description || ''}</td><td>${l.capacity || '—'}</td>
+    <tr><td>${l.name}</td><td>${l.address || '—'}</td><td>${l.description || ''}</td><td>${l.capacity || '—'}</td>
     <td><span class="status-tag ${l.status === 'sensitive' ? 'status-warn' : 'status-ok'}">${l.status === 'sensitive' ? 'Sensitive' : 'Active'}</span></td>
     <td>${canEdit ? `<div class="row-actions"><button class="icon-btn" onclick='openLocationForm(${JSON.stringify(l.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteLocation(${JSON.stringify(l.id)})'>Del</button></div>` : ''}</td></tr>`).join('');
 }
@@ -373,6 +463,7 @@ function openLocationForm(id) {
   showSlideover(`
     <h2>${loc ? 'Edit' : 'Add'} Location</h2>
     <div class="form-row"><label class="field-label">Name</label><input id="f-name" value="${loc?.name || ''}"></div>
+    <div class="form-row"><label class="field-label">Address</label><input id="f-address" value="${loc?.address || ''}" placeholder="Street, city"></div>
     <div class="form-row"><label class="field-label">Description</label><textarea id="f-desc" rows="3">${loc?.description || ''}</textarea></div>
     <div class="form-row"><label class="field-label">Capacity</label><input id="f-cap" value="${loc?.capacity || ''}"></div>
     <div class="form-row"><label class="field-label">Contact</label><input id="f-contact" value="${loc?.contact || ''}"></div>
@@ -387,6 +478,7 @@ function openLocationForm(id) {
 async function saveLocation(id) {
   const payload = {
     name: document.getElementById('f-name').value.trim(),
+    address: document.getElementById('f-address').value.trim() || null,
     description: document.getElementById('f-desc').value.trim() || null,
     capacity: document.getElementById('f-cap').value.trim() || null,
     contact: document.getElementById('f-contact').value.trim() || null,
@@ -411,11 +503,56 @@ async function deleteLocation(id) {
 }
 
 // ============ PEOPLE ============
+// ---- contact links (icon-only) ----
+const LINK_PLATFORMS = [
+  { key: 'soundcloud', label: 'SoundCloud' },
+  { key: 'mixcloud',   label: 'Mixcloud' },
+  { key: 'bandcamp',   label: 'Bandcamp' },
+  { key: 'youtube',    label: 'YouTube' },
+  { key: 'spotify',    label: 'Spotify' },
+  { key: 'instagram',  label: 'Instagram' },
+  { key: 'website',    label: 'Website' },
+];
+
+const LINK_ICONS = {
+  soundcloud: '<svg viewBox="0 0 24 24"><path d="M1 14v4h1v-4H1zm3-2v6h1v-6H4zm3-3v9h1V9H7zm3-3v12h1V6h-1zm4 12h6a3 3 0 0 0 0-6 5 5 0 0 0-6-4.9V18z"/></svg>',
+  mixcloud:   '<svg viewBox="0 0 24 24"><path d="M6 18a4.5 4.5 0 0 1 .7-9A5.5 5.5 0 0 1 17.3 9.7 4 4 0 0 1 17 18H6z"/></svg>',
+  bandcamp:   '<svg viewBox="0 0 24 24"><path d="M2 17.5 8.5 6.5H22L15.5 17.5H2z"/></svg>',
+  youtube:    '<svg viewBox="0 0 24 24"><path d="M22 12s0-3-.4-4.4a2.5 2.5 0 0 0-1.8-1.8C18.4 5.4 12 5.4 12 5.4s-6.4 0-7.8.4a2.5 2.5 0 0 0-1.8 1.8C2 9 2 12 2 12s0 3 .4 4.4a2.5 2.5 0 0 0 1.8 1.8c1.4.4 7.8.4 7.8.4s6.4 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8C22 15 22 12 22 12zM10 15V9l5 3-5 3z"/></svg>',
+  spotify:    '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm4.6 14.4a.8.8 0 0 1-1.1.3 11 11 0 0 0-6.7-1.3.8.8 0 1 1-.2-1.5 12.6 12.6 0 0 1 7.7 1.5.8.8 0 0 1 .3 1zm1.2-2.9a1 1 0 0 1-1.3.3 13.4 13.4 0 0 0-8-1.5 1 1 0 1 1-.3-1.9 15.3 15.3 0 0 1 9.2 1.8 1 1 0 0 1 .4 1.3zm.1-3a16 16 0 0 0-9.5-1.8 1.2 1.2 0 1 1-.3-2.3 18.4 18.4 0 0 1 11 2.1 1.2 1.2 0 0 1-1.2 2z"/></svg>',
+  instagram:  '<svg viewBox="0 0 24 24"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 3.3.1 4.8 1.7 4.9 4.9.1 1.3.1 1.6.1 4.8s0 3.6-.1 4.9c-.1 3.2-1.6 4.8-4.9 4.9-1.3.1-1.6.1-4.9.1s-3.6 0-4.9-.1c-3.3-.1-4.8-1.7-4.9-4.9-.1-1.3-.1-1.7-.1-4.9s0-3.6.1-4.9C2.4 3.9 3.9 2.4 7.1 2.3c1.3-.1 1.7-.1 4.9-.1zm0 3.1A6.7 6.7 0 1 0 18.7 12 6.7 6.7 0 0 0 12 5.3zm0 11A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3zm6.9-11.3a1.6 1.6 0 1 1-1.6-1.6 1.6 1.6 0 0 1 1.6 1.6z"/></svg>',
+  website:    '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm7.9 9h-3a15.4 15.4 0 0 0-1.2-5.3A8 8 0 0 1 19.9 11zM12 4c.8 1.2 1.6 3.5 1.8 7h-3.6c.2-3.5 1-5.8 1.8-7zM4.1 11a8 8 0 0 1 4.2-5.3A15.4 15.4 0 0 0 7.1 11zm0 2h3a15.4 15.4 0 0 0 1.2 5.3A8 8 0 0 1 4.1 13zM12 20c-.8-1.2-1.6-3.5-1.8-7h3.6c-.2 3.5-1 5.8-1.8 7zm3.7-1.7a15.4 15.4 0 0 0 1.2-5.3h3a8 8 0 0 1-4.2 5.3z"/></svg>',
+};
+
+function escapeAttr(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Only http(s) links are rendered — keeps a pasted "javascript:" URL from
+// becoming a clickable script.
+function safeUrl(v) {
+  const u = String(v || '').trim();
+  return /^https?:\/\//i.test(u) ? u : null;
+}
+
+function renderLinkIcons(links) {
+  const l = links || {};
+  const items = Object.keys(l).map(key => {
+    const url = safeUrl(l[key]);
+    if (!url) return '';
+    const meta = LINK_PLATFORMS.find(x => x.key === key);
+    const label = meta ? meta.label : key;
+    const icon = LINK_ICONS[key] || LINK_ICONS.website;
+    return `<a class="link-icon" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${icon}</a>`;
+  }).filter(Boolean);
+  return items.length ? `<div class="link-icons">${items.join('')}</div>` : '<span class="empty">—</span>';
+}
+
 function renderPeopleTable() {
   document.getElementById('people-count').textContent = cache.people.length + ' on record';
   const canEdit = currentProfile?.role === 'core';
   document.getElementById('people-table').innerHTML = cache.people.map(p => `
-    <tr><td>${p.name}</td><td>${p.role || ''}${p.tag ? ' · ' + p.tag : ''}</td><td>${p.nationality || '—'}</td><td>${p.contact || '—'}</td>
+    <tr><td>${p.name}</td><td>${p.role || ''}${p.tag ? ' · ' + p.tag : ''}</td><td>${p.nationality || '—'}</td><td>${p.contact || '—'}</td><td>${renderLinkIcons(p.links)}</td>
     <td>${canEdit ? `<div class="row-actions"><button class="icon-btn" onclick='openPersonForm(${JSON.stringify(p.id)})'>Edit</button><button class="icon-btn danger" onclick='deletePerson(${JSON.stringify(p.id)})'>Del</button></div>` : ''}</td></tr>`).join('');
 }
 
@@ -430,6 +567,7 @@ function openPersonForm(id) {
     <div class="form-row"><label class="field-label">Nationality</label><input id="f-nat" value="${p?.nationality || ''}"></div>
     <div class="form-row"><label class="field-label">Contact</label><input id="f-contact" value="${p?.contact || ''}"></div>
     <div class="form-row"><label class="field-label">Based at</label><select id="f-loc"><option value="">—</option>${locOptions}</select></div>
+    ${LINK_PLATFORMS.map(pl => `<div class="form-row"><label class="field-label">${pl.label}</label><input id="f-link-${pl.key}" value="${escapeAttr((p?.links || {})[pl.key] || '')}" placeholder="https://"></div>`).join('')}
     <div class="form-actions"><button class="btn" onclick='savePerson(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
   `);
 }
@@ -443,6 +581,15 @@ async function savePerson(id) {
     contact: document.getElementById('f-contact').value.trim() || null,
     location_id: document.getElementById('f-loc').value || null,
   };
+  // Start from what's already stored so link types added directly in the
+  // database (outside the seven below) survive an edit here.
+  const existingPerson = id ? cache.people.find(x => x.id === id) : null;
+  const links = Object.assign({}, existingPerson?.links || {});
+  LINK_PLATFORMS.forEach(pl => {
+    const v = document.getElementById('f-link-' + pl.key).value.trim();
+    if (v) links[pl.key] = v; else delete links[pl.key];
+  });
+  payload.links = links;
   if (!payload.name) { toast('Name is required', true); return; }
   const { error } = id ? await sb.from('people').update(payload).eq('id', id) : await sb.from('people').insert(payload);
   if (error) { toast(error.message, true); return; }
@@ -587,6 +734,7 @@ function closeSlideover() {
 // ============ THEME ============
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
+  refreshMapTiles();
   const label = theme === 'light' ? '☀ Light' : '☾ Dark';
   const loginBtn = document.getElementById('theme-toggle-login');
   const appBtn = document.getElementById('theme-toggle-app');
