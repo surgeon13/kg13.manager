@@ -78,11 +78,33 @@
   .kg-pin.sensitive { background:var(--hazard-bright);
     box-shadow:0 0 0 3px rgba(226,98,74,.28), 0 2px 6px rgba(0,0,0,.55); }
   .kg-pin.is-selected { outline:2px solid var(--paper); outline-offset:2px; }
+  .leaflet-marker-draggable .kg-pin { cursor:move; }
+  #picker-map { height:220px; border:1px solid var(--line); margin-top:6px; }
+  .picker-hint { font-size:10px; color:var(--paper-dim); margin-top:6px; line-height:1.5; }
   .map-legend { position:absolute; top:10px; right:12px; font-size:9px; color:var(--paper); background:rgba(19,18,16,.85); padding:6px 10px; display:flex; gap:12px; z-index:500; border:1px solid var(--line); }
   .dot{width:8px;height:8px;display:inline-block;} .dot.amber-dot{background:var(--amber);} .dot.hazard-dot{background:var(--hazard-bright);}
   .map-side { border:1px solid var(--line); background:var(--concrete); padding:16px; font-size:12px; max-height:480px; overflow-y:auto; }
   .map-side h3{font-family:'Oswald',sans-serif; font-size:15px; color:var(--amber); margin-bottom:10px;}
   .map-side .empty{color:var(--paper-dim); font-size:11px; line-height:1.6;}
+  .grp-row td { background:var(--concrete-lighter); font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--amber); cursor:pointer; user-select:none; }
+  .grp-row:hover td { background:var(--concrete-light); }
+  .grp-caret { display:inline-block; width:12px; color:var(--amber-dim); }
+  .grp-count { color:var(--paper-faint); letter-spacing:0; text-transform:none; font-family:'JetBrains Mono',monospace; font-size:10px; }
+  .grp-actions { float:right; display:flex; gap:6px; }
+  .grp-actions .icon-btn { font-size:9px; }
+  .timeline { margin-top:14px; }
+  .tl-item { border-left:2px solid var(--line); padding:0 0 14px 12px; position:relative; }
+  .tl-item:before { content:''; position:absolute; left:-5px; top:3px; width:8px; height:8px; background:var(--amber); border-radius:50%; }
+  .tl-item.moved:before { background:var(--amber); }
+  .tl-item.fixed:before { background:var(--ok-green); }
+  .tl-item.used:before  { background:var(--paper-dim); }
+  .tl-item.status:before{ background:var(--hazard-bright); }
+  .tl-type { font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); }
+  .tl-when { font-size:10px; color:var(--paper-faint); }
+  .tl-body { font-size:11px; color:var(--paper); margin-top:3px; line-height:1.5; }
+  .tl-actor { font-size:10px; color:var(--paper-faint); margin-top:2px; }
+  .header-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .link-icons { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
   .link-icon { display:inline-flex; width:20px; height:20px; align-items:center; justify-content:center;
     border:1px solid var(--line); border-radius:50%; color:var(--paper-dim); text-decoration:none; flex:0 0 auto; }
@@ -114,7 +136,6 @@
   .status-tag{font-size:9px; padding:2px 6px; letter-spacing:.06em; text-transform:uppercase;}
   .status-ok{color:var(--ok-green); border:1px solid #4a5c37;} .status-warn{color:var(--hazard-bright); border:1px solid var(--hazard);} .status-neutral{color:var(--paper-dim); border:1px solid var(--line);}
   .table-wrap{border:1px solid var(--line); overflow:auto; max-height:min(68vh, 640px); -webkit-overflow-scrolling:touch;}
-  .cat-row td{background:var(--concrete-lighter); font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber-dim);}
   .row-actions{display:flex; gap:6px;}
   .icon-btn{background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:10px; padding:3px 7px; cursor:pointer; font-family:'JetBrains Mono',monospace;}
   .icon-btn:hover{border-color:var(--amber); color:var(--amber);}
@@ -177,7 +198,7 @@
   <main>
     <section class="view active" id="view-map">
       <div class="view-title display">Location Map</div>
-      <div class="view-sub">Pin numbers show gear count · tap a pin or a name for details</div>
+      <div class="view-sub">Pin numbers show gear count · tap for details · Core Crew can drag a pin to move a site</div>
       <div class="map-wrap">
         <div class="map-frame">
           <div class="map-legend"><span><i class="dot amber-dot"></i>Active</span><span><i class="dot hazard-dot"></i>Sensitive</span></div>
@@ -207,7 +228,7 @@
 
     <section class="view" id="view-gear">
       <div class="view-header"><div><div class="view-title display">Gear</div><div class="view-sub" id="gear-count">Loading…</div></div>
-        <button class="btn small" onclick="openGearForm()">+ Add Gear</button></div>
+        <div class="header-actions"><button class="btn small ghost" id="group-add-btn" onclick="createGroup()" style="display:none;">+ New Group</button><button class="btn small" onclick="openGearForm()">+ Add Gear</button></div></div>
       <div class="table-wrap"><table><thead><tr><th>Item</th><th>Detail</th><th>Qty</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody id="gear-table"></tbody></table></div>
     </section>
   </main>
@@ -226,9 +247,11 @@ const SUPABASE_KEY = "sb_publishable_FPXt5zqgK9vJMlM8ogoIQg_2e7Mj-GS";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentProfile = null;
+let currentEmail = null;
+const collapsedGroups = new Set();
 let authMode = 'signin'; // 'signin' | 'signup'
 let map, mapMarkers = [];
-let cache = { locations: [], people: [], gear: [], dates: [], history: [] };
+let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [] };
 
 // ============ AUTH ============
 function toggleAuthMode() {
@@ -289,11 +312,13 @@ async function onSignedIn(session) {
   const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
   if (error) { showAuthError('Could not load profile: ' + error.message); return; }
   currentProfile = profile;
+  currentEmail = session.user.email || null;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
   document.getElementById('role-pill').textContent = profile.role === 'core' ? 'CORE CREW' : 'MEMBER';
   document.getElementById('loc-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
   document.getElementById('people-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
+  document.getElementById('group-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
   await loadAll();
 }
 
@@ -310,16 +335,20 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
 // ============ DATA LOADING ============
 async function loadAll() {
-  const [locRes, peopleRes, gearRes, datesRes] = await Promise.all([
+  const [locRes, peopleRes, gearRes, datesRes, groupRes, eventRes] = await Promise.all([
     sb.from('locations').select('*').order('name'),
     sb.from('people').select('*').order('name'),
-    sb.from('gear').select('*').order('category'),
+    sb.from('gear').select('*').order('item'),
     sb.from('event_dates').select('*').order('month').order('day'),
+    sb.from('gear_groups').select('*').order('name'),
+    sb.from('gear_events').select('*').order('created_at', { ascending: false }).limit(1000),
   ]);
   cache.locations = locRes.data || [];
   cache.people = peopleRes.data || [];
   cache.gear = gearRes.data || [];
   cache.dates = datesRes.data || [];
+  cache.groups = groupRes.data || [];
+  cache.events = eventRes.data || [];
   renderLocationsTable();
   renderPeopleTable();
   renderGearTable();
@@ -341,6 +370,49 @@ function locName(id) { const l = cache.locations.find(x => x.id === id); return 
 // ============ MAP ============
 let kgTiles = null;
 let mapFitted = false;
+let pickerMap = null, pickerMarker = null;
+
+// Centre a fresh pick on the middle of the sites we already know about,
+// which is far more useful than a hardcoded city centre.
+function defaultPickerCenter() {
+  const pts = cache.locations.filter(l => l.lat !== null && l.lng !== null);
+  if (!pts.length) return [32.0575, 34.7650];
+  return [
+    pts.reduce((sum, l) => sum + Number(l.lat), 0) / pts.length,
+    pts.reduce((sum, l) => sum + Number(l.lng), 0) / pts.length,
+  ];
+}
+
+function syncPickerInputs(latlng) {
+  const lat = document.getElementById('f-lat');
+  const lng = document.getElementById('f-lng');
+  if (lat) lat.value = latlng.lat.toFixed(6);
+  if (lng) lng.value = latlng.lng.toFixed(6);
+}
+
+function destroyPicker() {
+  if (pickerMap) { pickerMap.remove(); pickerMap = null; pickerMarker = null; }
+}
+
+function initLocationPicker(lat, lng) {
+  destroyPicker();
+  const el = document.getElementById('picker-map');
+  if (!el) return;
+  const hasCoords = lat !== null && lat !== '' && lng !== null && lng !== '';
+  const start = hasCoords ? [Number(lat), Number(lng)] : defaultPickerCenter();
+  pickerMap = L.map(el, { scrollWheelZoom: false }).setView(start, hasCoords ? 16 : 13);
+  L.tileLayer(tileUrlForTheme(), { maxZoom: 20, subdomains: 'abcd', attribution: '© OSM · © CARTO' }).addTo(pickerMap);
+  pickerMarker = L.marker(start, {
+    draggable: true,
+    icon: L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div class="kg-pin"></div>' })
+  }).addTo(pickerMap);
+  pickerMarker.on('dragend', () => syncPickerInputs(pickerMarker.getLatLng()));
+  pickerMap.on('click', e => { pickerMarker.setLatLng(e.latlng); syncPickerInputs(e.latlng); });
+  if (hasCoords) syncPickerInputs(pickerMarker.getLatLng());
+  // The slideover slides in over ~250ms; Leaflet measures a zero-width box
+  // if it renders before that settles.
+  setTimeout(() => { if (pickerMap) pickerMap.invalidateSize(); }, 300);
+}
 
 function tileUrlForTheme() {
   const light = document.documentElement.getAttribute('data-theme') === 'light';
@@ -381,9 +453,11 @@ function refreshMapMarkers() {
       className: '', iconSize: [26, 26], iconAnchor: [13, 13],
       html: `<div class="kg-pin ${loc.status === 'sensitive' ? 'sensitive' : ''}" data-loc="${loc.id}">${stats.gear || ''}</div>`
     });
-    const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map);
-    marker.bindTooltip(`${loc.name} — ${stats.gear} gear`, { direction: 'top', offset: [0, -16] });
+    const canDrag = currentProfile?.role === 'core';
+    const marker = L.marker([loc.lat, loc.lng], { icon, draggable: canDrag, autoPan: true }).addTo(map);
+    marker.bindTooltip(`${loc.name} — ${stats.gear} gear${canDrag ? ' · drag to move' : ''}`, { direction: 'top', offset: [0, -16] });
     marker.on('click', () => selectLocationOnMap(loc.id));
+    if (canDrag) marker.on('dragend', () => saveDraggedLocation(loc.id, marker));
     marker.kgLocId = loc.id;
     mapMarkers.push(marker);
     points.push([loc.lat, loc.lng]);
@@ -393,6 +467,24 @@ function refreshMapMarkers() {
     mapFitted = true;
   }
   renderMapSideList();
+}
+
+// Dragging a pin writes straight through — no form round trip. The cache is
+// patched in place rather than reloading, so the map does not jump back.
+async function saveDraggedLocation(id, marker) {
+  const ll = marker.getLatLng();
+  const lat = Number(ll.lat.toFixed(6));
+  const lng = Number(ll.lng.toFixed(6));
+  const loc = cache.locations.find(l => l.id === id);
+  const { error } = await sb.from('locations').update({ lat, lng }).eq('id', id);
+  if (error) {
+    toast(error.message, true);
+    if (loc) marker.setLatLng([loc.lat, loc.lng]);
+    return;
+  }
+  if (loc) { loc.lat = lat; loc.lng = lng; }
+  toast(`${loc ? loc.name : 'Location'} moved`);
+  renderLocationsTable();
 }
 
 function highlightPin(id) {
@@ -469,10 +561,15 @@ function openLocationForm(id) {
     <div class="form-row"><label class="field-label">Contact</label><input id="f-contact" value="${loc?.contact || ''}"></div>
     <div class="form-row"><label class="field-label">Latitude</label><input id="f-lat" value="${loc?.lat ?? ''}" placeholder="32.0558"></div>
     <div class="form-row"><label class="field-label">Longitude</label><input id="f-lng" value="${loc?.lng ?? ''}" placeholder="34.7698"></div>
+    <div class="form-row"><label class="field-label">Pick on map</label>
+      <div id="picker-map"></div>
+      <div class="picker-hint">Drag the pin or tap the map — the coordinates above fill in automatically.</div>
+    </div>
     <div class="form-row"><label class="field-label">Status</label>
       <select id="f-status"><option value="active" ${loc?.status==='active'?'selected':''}>Active</option><option value="sensitive" ${loc?.status==='sensitive'?'selected':''}>Sensitive</option></select></div>
     <div class="form-actions"><button class="btn" onclick='saveLocation(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
   `);
+  initLocationPicker(loc?.lat ?? '', loc?.lng ?? '');
 }
 
 async function saveLocation(id) {
@@ -635,26 +732,177 @@ async function deletePerson(id) {
 }
 
 // ============ GEAR ============
+function statusLabel(v) {
+  return v === 'warn' ? 'Flagged' : v === 'neutral' ? '—' : 'Working';
+}
+
+function whenLabel(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Movement, repairs and usage all land in one timeline. Moves and status
+// changes are written automatically on save; fixes and usage are logged by
+// hand here, since nothing in the record can infer them.
+function openGearHistory(id) {
+  const g = cache.gear.find(x => x.id === id);
+  if (!g) return;
+  const canEdit = currentProfile?.role === 'core';
+  const events = cache.events.filter(e => e.gear_id === id);
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${g.location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+
+  const timeline = events.length ? events.map(e => {
+    const bits = [];
+    if (e.note) bits.push(e.note);
+    if (!e.note && e.event_type === 'moved') bits.push(`${locName(e.from_location_id)} → ${locName(e.to_location_id)}`);
+    return `<div class="tl-item ${e.event_type}">
+      <span class="tl-type">${e.event_type}</span> <span class="tl-when">${whenLabel(e.created_at)}</span>
+      ${bits.length ? `<div class="tl-body">${bits.join('<br>')}</div>` : ''}
+      ${e.actor ? `<div class="tl-actor">${e.actor}</div>` : ''}
+    </div>`;
+  }).join('') : '<p class="empty">Nothing logged yet.</p>';
+
+  showSlideover(`
+    <h2>${g.item}</h2>
+    <div class="side-row"><span class="side-label">Group</span><span>${groupName(g.group_id) || 'Ungrouped'}</span></div>
+    <div class="side-row"><span class="side-label">Location</span><span>${locName(g.location_id)}</span></div>
+    <div class="side-row"><span class="side-label">Status</span><span>${statusLabel(g.status)}</span></div>
+    ${canEdit ? `
+      <h3 style="margin-top:18px;font-family:'Oswald',sans-serif;font-size:13px;color:var(--amber);">Log an entry</h3>
+      <div class="form-row"><label class="field-label">Type</label>
+        <select id="f-ev-type" onchange="toggleEventLocation()">
+          <option value="fixed">Fixed / serviced</option>
+          <option value="used">Used at an event</option>
+          <option value="moved">Moved</option>
+          <option value="note">Note</option>
+        </select></div>
+      <div class="form-row" id="ev-loc-row" style="display:none;"><label class="field-label">Moved to</label>
+        <select id="f-ev-loc"><option value="">—</option>${locOptions}</select></div>
+      <div class="form-row"><label class="field-label">Note</label><textarea id="f-ev-note" rows="2" placeholder="What happened?"></textarea></div>
+      <div class="form-actions"><button class="btn" onclick='addGearEvent(${JSON.stringify(id)})'>Add to log</button></div>
+    ` : ''}
+    <h3 style="margin-top:18px;font-family:'Oswald',sans-serif;font-size:13px;color:var(--amber);">History (${events.length})</h3>
+    <div class="timeline">${timeline}</div>
+  `);
+}
+
+function toggleEventLocation() {
+  const row = document.getElementById('ev-loc-row');
+  if (row) row.style.display = document.getElementById('f-ev-type').value === 'moved' ? 'block' : 'none';
+}
+
+async function addGearEvent(id) {
+  const type = document.getElementById('f-ev-type').value;
+  const note = document.getElementById('f-ev-note').value.trim() || null;
+  const toLoc = type === 'moved' ? (document.getElementById('f-ev-loc').value || null) : null;
+  if (!note && type !== 'moved') { toast('Add a note describing what happened', true); return; }
+
+  const gear = cache.gear.find(x => x.id === id);
+  const entry = { gear_id: id, event_type: type, note };
+  if (type === 'moved') {
+    entry.from_location_id = gear ? gear.location_id : null;
+    entry.to_location_id = toLoc;
+    if (!note) entry.note = `${locName(entry.from_location_id)} → ${locName(toLoc)}`;
+  }
+  const { error } = await sb.from('gear_events').insert(Object.assign({ actor: currentEmail }, entry));
+  if (error) { toast(error.message, true); return; }
+
+  // A logged move is the real thing, so the gear row follows it.
+  if (type === 'moved') {
+    const { error: moveErr } = await sb.from('gear').update({ location_id: toLoc }).eq('id', id);
+    if (moveErr) { toast('Logged, but moving the item failed: ' + moveErr.message, true); }
+  }
+  toast('Logged');
+  await loadAll();
+  openGearHistory(id);
+}
+
+function groupName(id) {
+  const g = cache.groups.find(x => x.id === id);
+  return g ? g.name : null;
+}
+
+function gearRowHtml(g, canEdit) {
+  return `<tr><td>${g.item}</td><td>${g.detail || ''}</td><td>${g.qty ?? ''}</td><td>${locName(g.location_id)}</td>
+    <td><span class="status-tag ${g.status === 'warn' ? 'status-warn' : g.status === 'neutral' ? 'status-neutral' : 'status-ok'}">${g.status === 'warn' ? 'Flagged' : g.status === 'neutral' ? '—' : 'Working'}</span></td>
+    <td><div class="row-actions"><button class="icon-btn" onclick='openGearHistory(${JSON.stringify(g.id)})'>Log</button>${canEdit ? `<button class="icon-btn" onclick='openGearForm(${JSON.stringify(g.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteGear(${JSON.stringify(g.id)})'>Del</button>` : ''}</div></td></tr>`;
+}
+
+// Groups render as collapsible headers with their gear nested underneath.
+// Ungrouped items fall into a trailing pseudo-group so nothing hides.
 function renderGearTable() {
-  document.getElementById('gear-count').textContent = cache.gear.length + ' items';
-  let html = ''; let lastCat = null;
-  cache.gear.forEach(g => {
-    if (g.category !== lastCat) { html += `<tr class="cat-row"><td colspan="6">${g.category || 'Uncategorized'}</td></tr>`; lastCat = g.category; }
-    html += `<tr><td>${g.item}</td><td>${g.detail || ''}</td><td>${g.qty ?? ''}</td><td>${locName(g.location_id)}</td>
-      <td><span class="status-tag ${g.status === 'warn' ? 'status-warn' : g.status === 'neutral' ? 'status-neutral' : 'status-ok'}">${g.status === 'warn' ? 'Flagged' : g.status === 'neutral' ? '—' : 'Working'}</span></td>
-      <td><div class="row-actions"><button class="icon-btn" onclick='openGearForm(${JSON.stringify(g.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteGear(${JSON.stringify(g.id)})'>Del</button></div></td></tr>`;
+  document.getElementById('gear-count').textContent =
+    `${cache.gear.length} items in ${cache.groups.length} groups`;
+  const canEdit = currentProfile?.role === 'core';
+  const buckets = cache.groups.map(grp => ({
+    id: grp.id,
+    name: grp.name,
+    real: true,
+    items: cache.gear.filter(g => g.group_id === grp.id),
+  }));
+  const loose = cache.gear.filter(g => !g.group_id);
+  if (loose.length) buckets.push({ id: '__none', name: 'Ungrouped', real: false, items: loose });
+
+  let html = '';
+  buckets.forEach(b => {
+    const open = !collapsedGroups.has(b.id);
+    const actions = (canEdit && b.real)
+      ? `<span class="grp-actions"><button class="icon-btn" onclick='event.stopPropagation();renameGroup(${JSON.stringify(b.id)})'>Rename</button><button class="icon-btn danger" onclick='event.stopPropagation();deleteGroup(${JSON.stringify(b.id)})'>Ungroup all</button></span>`
+      : '';
+    html += `<tr class="grp-row" onclick='toggleGroup(${JSON.stringify(b.id)})'><td colspan="6">
+      <span class="grp-caret">${open ? '▾' : '▸'}</span>${b.name}
+      <span class="grp-count"> · ${b.items.length} item${b.items.length === 1 ? '' : 's'}</span>${actions}</td></tr>`;
+    if (open) html += b.items.map(g => gearRowHtml(g, canEdit)).join('');
   });
+  if (!buckets.length) html = '<tr><td colspan="6" class="empty">No gear yet.</td></tr>';
   document.getElementById('gear-table').innerHTML = html;
+}
+
+function toggleGroup(id) {
+  if (collapsedGroups.has(id)) collapsedGroups.delete(id); else collapsedGroups.add(id);
+  renderGearTable();
+}
+
+async function createGroup() {
+  const name = prompt('Name for the new group (e.g. "PA System #02")');
+  if (!name || !name.trim()) return;
+  const { error } = await sb.from('gear_groups').insert({ name: name.trim() });
+  if (error) { toast(error.message, true); return; }
+  toast('Group created');
+  await loadAll();
+}
+
+async function renameGroup(id) {
+  const grp = cache.groups.find(g => g.id === id);
+  const name = prompt('Rename group', grp ? grp.name : '');
+  if (!name || !name.trim()) return;
+  const { error } = await sb.from('gear_groups').update({ name: name.trim() }).eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Group renamed');
+  await loadAll();
+}
+
+// Deleting the group only ungroups its gear — the FK is ON DELETE SET NULL,
+// so the items themselves survive and reappear under "Ungrouped".
+async function deleteGroup(id) {
+  const grp = cache.groups.find(g => g.id === id);
+  const count = cache.gear.filter(g => g.group_id === id).length;
+  if (!confirm(`Ungroup "${grp ? grp.name : ''}"?\n\nThe group is removed and its ${count} item${count === 1 ? '' : 's'} become Ungrouped. No gear is deleted.`)) return;
+  const { error } = await sb.from('gear_groups').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Group removed, gear kept');
+  await loadAll();
 }
 
 function openGearForm(id) {
   const g = id ? cache.gear.find(x => x.id === id) : null;
   const locOptions = cache.locations.map(l => `<option value="${l.id}" ${g?.location_id===l.id?'selected':''}>${l.name}</option>`).join('');
+  const groupOptions = cache.groups.map(gr => `<option value="${gr.id}" ${g?.group_id===gr.id?'selected':''}>${gr.name}</option>`).join('');
   showSlideover(`
     <h2>${g ? 'Edit' : 'Add'} Gear</h2>
     <div class="form-row"><label class="field-label">Item</label><input id="f-item" value="${g?.item || ''}"></div>
     <div class="form-row"><label class="field-label">Detail</label><input id="f-detail" value="${g?.detail || ''}"></div>
-    <div class="form-row"><label class="field-label">Category</label><input id="f-cat" value="${g?.category || ''}"></div>
+    <div class="form-row"><label class="field-label">Group</label><select id="f-group"><option value="">— Ungrouped —</option>${groupOptions}</select></div>
     <div class="form-row"><label class="field-label">Qty</label><input id="f-qty" type="number" value="${g?.qty ?? 1}"></div>
     <div class="form-row"><label class="field-label">Location</label><select id="f-loc"><option value="">—</option>${locOptions}</select></div>
     <div class="form-row"><label class="field-label">Status</label>
@@ -664,12 +912,18 @@ function openGearForm(id) {
   `);
 }
 
+async function logGearEvent(entry) {
+  const { error } = await sb.from('gear_events').insert(Object.assign({ actor: currentEmail }, entry));
+  if (error) toast('Saved, but the log entry failed: ' + error.message, true);
+}
+
 async function saveGear(id) {
   const newLocId = document.getElementById('f-loc').value || null;
+  const newGroupId = document.getElementById('f-group').value || null;
   const payload = {
     item: document.getElementById('f-item').value.trim(),
     detail: document.getElementById('f-detail').value.trim() || null,
-    category: document.getElementById('f-cat').value.trim() || null,
+    group_id: newGroupId,
     qty: parseInt(document.getElementById('f-qty').value) || 1,
     location_id: newLocId,
     status: document.getElementById('f-status').value,
@@ -678,14 +932,39 @@ async function saveGear(id) {
   if (!payload.item) { toast('Item name is required', true); return; }
 
   const existing = id ? cache.gear.find(x => x.id === id) : null;
-  const { error } = id ? await sb.from('gear').update(payload).eq('id', id) : await sb.from('gear').insert(payload);
-  if (error) { toast(error.message, true); return; }
+  let gearId = id;
+  if (id) {
+    const { error } = await sb.from('gear').update(payload).eq('id', id);
+    if (error) { toast(error.message, true); return; }
+  } else {
+    const { data, error } = await sb.from('gear').insert(payload).select('id').single();
+    if (error) { toast(error.message, true); return; }
+    gearId = data?.id;
+  }
 
-  // Log a history entry if location changed (or new item created with a location)
-  if (!existing || existing.location_id !== newLocId) {
-    const gearId = id || (await sb.from('gear').select('id').eq('item', payload.item).order('created_at', {ascending:false}).limit(1).single()).data?.id;
-    if (gearId) {
-      await sb.from('gear_location_history').insert({ gear_id: gearId, location_id: newLocId, note: 'Updated via app' });
+  if (gearId) {
+    if (!existing) {
+      await logGearEvent({ gear_id: gearId, event_type: 'created', to_location_id: newLocId, to_status: payload.status, note: `Added "${payload.item}"` });
+    } else {
+      if (existing.location_id !== newLocId) {
+        await logGearEvent({ gear_id: gearId, event_type: 'moved', from_location_id: existing.location_id, to_location_id: newLocId,
+          note: `${locName(existing.location_id)} → ${locName(newLocId)}` });
+      }
+      if (existing.status !== payload.status) {
+        await logGearEvent({ gear_id: gearId, event_type: 'status', from_status: existing.status, to_status: payload.status,
+          note: `${statusLabel(existing.status)} → ${statusLabel(payload.status)}` });
+      }
+      // Everything else collapses into one "edited" entry naming the fields,
+      // so the timeline stays readable instead of one line per column.
+      const changed = [];
+      if (existing.item !== payload.item) changed.push('name');
+      if ((existing.detail || null) !== payload.detail) changed.push('detail');
+      if ((existing.qty ?? null) !== payload.qty) changed.push(`qty ${existing.qty ?? '—'} → ${payload.qty}`);
+      if ((existing.note || null) !== payload.note) changed.push('note');
+      if ((existing.group_id || null) !== newGroupId) changed.push(`group ${groupName(existing.group_id) || 'Ungrouped'} → ${groupName(newGroupId) || 'Ungrouped'}`);
+      if (changed.length) {
+        await logGearEvent({ gear_id: gearId, event_type: 'edited', note: 'Changed ' + changed.join(', ') });
+      }
     }
   }
   toast('Gear saved');
@@ -755,6 +1034,7 @@ function showSlideover(html) {
   document.getElementById('slideover').classList.add('active');
 }
 function closeSlideover() {
+  destroyPicker();
   document.getElementById('overlay').classList.remove('active');
   document.getElementById('slideover').classList.remove('active');
 }
