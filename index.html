@@ -4,41 +4,57 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KG13 — Internal</title>
+<link rel="icon" href="kg13-logo.jpeg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+  :root { --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  /* KG13 house palette, shared with kg13tlv.com: black 0 0% 5%,
+     red 0 73% 55%, white 0 0% 98%, plus the acid magenta from the site's
+     gradient for anything flagged. Variable names are inherited from the
+     old scheme so every existing rule picks these up unchanged. */
   :root {
-    --concrete:#1b1a17; --concrete-deep:#131210; --concrete-light:#262420; --concrete-lighter:#302d27;
-    --paper:#e9e4d8; --paper-dim:#a9a394; --paper-faint:#6b6659;
-    --amber:#d9a441; --amber-dim:#8a6b2f; --hazard:#b34a3a; --hazard-bright:#e2624a; --ok-green:#8fae6b; --line:#3a3630;
-    --btn-text:#1b1a17;
+    --concrete:#161616; --concrete-deep:#0d0d0d; --concrete-light:#1f1f1f; --concrete-lighter:#2a2a2a;
+    --paper:#fafafa; --paper-dim:#a3a3a3; --paper-faint:#6b6b6b;
+    --amber:#e03838; --amber-dim:#8f2323; --hazard:#c11f63; --hazard-bright:#ff0080; --ok-green:#1fc773; --line:#333333;
+    --btn-text:#fafafa;
+    --shadow-brutal:4px 4px 0 #000;
   }
   :root[data-theme="light"] {
-    --concrete:#f2ede2; --concrete-deep:#e7dfd0; --concrete-light:#e1d7c3; --concrete-lighter:#d6cab0;
-    --paper:#221f1a; --paper-dim:#5c5548; --paper-faint:#8a8270;
-    --amber:#b8792a; --amber-dim:#8a5f24; --hazard:#a8402f; --hazard-bright:#c94a35; --ok-green:#4f7a35; --line:#cfc3ab;
-    --btn-text:#1b1a17;
+    --concrete:#ffffff; --concrete-deep:#fafafa; --concrete-light:#f0f0f0; --concrete-lighter:#e6e6e6;
+    --paper:#0d0d0d; --paper-dim:#525252; --paper-faint:#8a8a8a;
+    --amber:#d02020; --amber-dim:#a01818; --hazard:#c11f63; --hazard-bright:#e6006f; --ok-green:#12915a; --line:#d4d4d4;
+    --btn-text:#fafafa;
+    --shadow-brutal:4px 4px 0 #0d0d0d;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body { background:var(--concrete-deep); color:var(--paper); font-family:'JetBrains Mono',monospace; min-height:100vh; transition:background .2s ease, color .2s ease; }
-  .display { font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; }
+  .display { font-family:var(--font-display); font-weight:900; text-transform:uppercase; letter-spacing:-.02em; }
   ::-webkit-scrollbar{width:8px;height:8px;} ::-webkit-scrollbar-thumb{background:var(--line);}
 
-  .theme-toggle { background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:6px 10px; cursor:pointer; font-family:'Oswald',sans-serif; }
+  .theme-toggle { background:none; border:1px solid var(--line); color:var(--paper-dim); font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:6px 10px; cursor:pointer; font-family:var(--font-display); }
   .theme-toggle:hover { border-color:var(--amber); color:var(--amber); }
 
   #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:24px; padding:24px; position:relative; }
-  .brand-mark { display:flex; align-items:baseline; gap:10px; }
-  .brand-mark .num { font-family:'Oswald',sans-serif; font-size:60px; font-weight:700; color:var(--amber); }
+  .brand-logo { width:56px; height:56px; object-fit:contain; border:2px solid var(--paper); display:block; }
+  .header-logo { width:30px; height:30px; object-fit:contain; border:1px solid var(--line); display:block; }
+  .brand-mark { display:flex; align-items:center; gap:14px; }
+  .brand-mark .num { font-family:var(--font-display); font-size:60px; font-weight:900; letter-spacing:-.03em; color:var(--amber); }
   .brand-mark .sub { font-size:11px; color:var(--paper-dim); letter-spacing:.25em; text-transform:uppercase; border-left:2px solid var(--hazard); padding-left:10px; }
   .login-box { width:100%; max-width:340px; background:var(--concrete); border:1px solid var(--line); padding:26px; }
   .field-label { font-size:10px; letter-spacing:.15em; color:var(--paper-dim); text-transform:uppercase; display:block; margin:14px 0 6px; }
   .field-label:first-of-type{margin-top:0;}
   input, select, textarea { width:100%; background:var(--concrete-deep); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:14px; }
   input:focus, select:focus, textarea:focus { outline:1px solid var(--amber); border-color:var(--amber); }
-  .btn { width:100%; margin-top:18px; background:var(--amber); color:var(--btn-text); border:none; padding:11px; font-family:'Oswald',sans-serif; font-weight:600; letter-spacing:.1em; text-transform:uppercase; font-size:12px; cursor:pointer; }
-  .btn:hover{background:#eab85c;} .btn.small{width:auto; padding:7px 14px; margin-top:0; font-size:10px;}
-  .btn.ghost{background:transparent; border:1px solid var(--amber-dim); color:var(--amber);}
+  .btn { width:100%; margin-top:18px; background:var(--amber); color:var(--btn-text); border:2px solid var(--paper);
+    border-radius:0; padding:11px; font-family:var(--font-display); font-weight:800; letter-spacing:.08em;
+    text-transform:uppercase; font-size:12px; cursor:pointer; box-shadow:var(--shadow-brutal);
+    transition:transform .15s cubic-bezier(.4,0,1,1), box-shadow .15s cubic-bezier(.4,0,1,1); }
+  .btn:hover{ transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--amber-dim); }
+  .btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--amber-dim); }
+  .btn.small{width:auto; padding:7px 14px; margin-top:0; font-size:10px; box-shadow:3px 3px 0 #000;}
+  .btn.ghost{background:transparent; border:2px solid var(--amber); color:var(--amber); box-shadow:none;}
+  .btn.ghost:hover{ background:var(--amber); color:var(--btn-text); transform:none; box-shadow:none; }
   .btn.danger{background:var(--hazard); color:var(--paper);}
   .toggle-mode { font-size:11px; color:var(--paper-dim); text-align:center; cursor:pointer; margin-top:14px; }
   .toggle-mode:hover{color:var(--amber);}
@@ -49,13 +65,13 @@
   #app.active{display:flex;}
   header { border-bottom:1px solid var(--line); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; background:var(--concrete); gap:12px; flex-wrap:wrap; }
   .header-left{display:flex; align-items:center; gap:14px;}
-  .header-left .num{font-family:'Oswald',sans-serif; font-weight:700; color:var(--amber); font-size:20px;}
+  .header-left .num{font-family:var(--font-display); font-weight:900; letter-spacing:-.02em; color:var(--amber); font-size:20px;}
   .role-pill{font-size:9px; letter-spacing:.1em; padding:3px 8px; border:1px solid var(--amber-dim); color:var(--amber); text-transform:uppercase;}
   .signout{font-size:10px; color:var(--paper-dim); letter-spacing:.1em; text-transform:uppercase; cursor:pointer; background:none; border:none; font-family:inherit;}
   .signout:hover{color:var(--hazard-bright);}
 
   nav { display:flex; border-bottom:1px solid var(--line); background:var(--concrete-deep); overflow-x:auto; }
-  .nav-item { padding:12px 18px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--paper-dim); cursor:pointer; border:none; border-right:1px solid var(--line); white-space:nowrap; background:none; font-family:'Oswald',sans-serif; font-weight:500; }
+  .nav-item { padding:12px 18px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--paper-dim); cursor:pointer; border:none; border-right:1px solid var(--line); white-space:nowrap; background:none; font-family:var(--font-display); font-weight:500; }
   .nav-item.active{color:var(--amber); background:var(--concrete-light);}
   .nav-item:hover:not(.active){color:var(--paper);}
 
@@ -72,21 +88,21 @@
   .leaflet-container { background:var(--concrete-deep) !important; font-family:'JetBrains Mono',monospace; }
   .leaflet-control-attribution { font-size:9px !important; }
   .kg-pin { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    font-family:'Oswald',sans-serif; font-size:11px; font-weight:600; line-height:1; color:#1b1a17;
+    font-family:var(--font-display); font-size:11px; font-weight:800; line-height:1; color:var(--btn-text);
     background:var(--amber); border:2px solid rgba(0,0,0,.5);
-    box-shadow:0 0 0 3px rgba(217,164,65,.25), 0 2px 6px rgba(0,0,0,.55); }
+    box-shadow:0 0 0 3px rgba(224,56,56,.30), 0 2px 6px rgba(0,0,0,.55); }
   .kg-pin.sensitive { background:var(--hazard-bright);
-    box-shadow:0 0 0 3px rgba(226,98,74,.28), 0 2px 6px rgba(0,0,0,.55); }
+    box-shadow:0 0 0 3px rgba(255,0,128,.30), 0 2px 6px rgba(0,0,0,.55); }
   .kg-pin.is-selected { outline:2px solid var(--paper); outline-offset:2px; }
   .leaflet-marker-draggable .kg-pin { cursor:move; }
   #picker-map { height:220px; border:1px solid var(--line); margin-top:6px; }
   .picker-hint { font-size:10px; color:var(--paper-dim); margin-top:6px; line-height:1.5; }
-  .map-legend { position:absolute; top:10px; right:12px; font-size:9px; color:var(--paper); background:rgba(19,18,16,.85); padding:6px 10px; display:flex; gap:12px; z-index:500; border:1px solid var(--line); }
+  .map-legend { position:absolute; top:10px; right:12px; font-size:9px; color:var(--paper); background:var(--concrete-deep); opacity:.92; padding:6px 10px; display:flex; gap:12px; z-index:500; border:1px solid var(--line); }
   .dot{width:8px;height:8px;display:inline-block;} .dot.amber-dot{background:var(--amber);} .dot.hazard-dot{background:var(--hazard-bright);}
   .map-side { border:1px solid var(--line); background:var(--concrete); padding:16px; font-size:12px; max-height:480px; overflow-y:auto; }
-  .map-side h3{font-family:'Oswald',sans-serif; font-size:15px; color:var(--amber); margin-bottom:10px;}
+  .map-side h3{font-family:var(--font-display); font-size:15px; color:var(--amber); margin-bottom:10px;}
   .map-side .empty{color:var(--paper-dim); font-size:11px; line-height:1.6;}
-  .grp-row td { background:var(--concrete-lighter); font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:.08em;
+  .grp-row td { background:var(--concrete-lighter); font-family:var(--font-display); font-size:11px; letter-spacing:.08em;
     text-transform:uppercase; color:var(--amber); cursor:pointer; user-select:none; }
   .grp-row:hover td { background:var(--concrete-light); }
   .grp-caret { display:inline-block; width:12px; color:var(--amber-dim); }
@@ -100,7 +116,7 @@
   .tl-item.fixed:before { background:var(--ok-green); }
   .tl-item.used:before  { background:var(--paper-dim); }
   .tl-item.status:before{ background:var(--hazard-bright); }
-  .tl-type { font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); }
+  .tl-type { font-family:var(--font-display); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); }
   .tl-when { font-size:10px; color:var(--paper-faint); }
   .tl-body { font-size:11px; color:var(--paper); margin-top:3px; line-height:1.5; }
   .tl-actor { font-size:10px; color:var(--paper-faint); margin-top:2px; }
@@ -118,7 +134,7 @@
   .map-loc-meta { display:block; font-size:10px; color:var(--paper-dim); margin-top:3px; }
   .map-loc-meta .warn { color:var(--hazard-bright); }
   .map-back { background:none; border:0; color:var(--amber); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
-    font-family:'Oswald',sans-serif; cursor:pointer; padding:0 0 10px; }
+    font-family:var(--font-display); cursor:pointer; padding:0 0 10px; }
   .map-back:hover { text-decoration:underline; }
   .side-row{display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line);}
   .side-row:last-child{border-bottom:none;}
@@ -130,7 +146,7 @@
   .badge-sensitive{display:inline-block; font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--hazard-bright); border:1px solid var(--hazard); padding:2px 6px; margin-top:6px;}
 
   table{width:100%; min-width:760px; border-collapse:collapse; font-size:12px;}
-  th{text-align:left; font-family:'Oswald',sans-serif; font-weight:500; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); padding:9px 10px; border-bottom:1px solid var(--amber-dim); position:sticky; top:0; z-index:2; background:var(--concrete-light); white-space:nowrap;}
+  th{text-align:left; font-family:var(--font-display); font-weight:500; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); padding:9px 10px; border-bottom:1px solid var(--amber-dim); position:sticky; top:0; z-index:2; background:var(--concrete-light); white-space:nowrap;}
   td{padding:9px 10px; border-bottom:1px solid var(--line);}
   tr:hover td{background:var(--concrete-light);}
   .status-tag{font-size:9px; padding:2px 6px; letter-spacing:.06em; text-transform:uppercase;}
@@ -143,7 +159,7 @@
 
   .date-strip{display:flex; flex-wrap:wrap; gap:10px;}
   .date-card{background:var(--concrete); border:1px solid var(--line); padding:14px 16px; min-width:170px; flex:1; position:relative;}
-  .date-card .dm{font-family:'Oswald',sans-serif; font-size:22px; color:var(--amber);}
+  .date-card .dm{font-family:var(--font-display); font-size:22px; color:var(--amber);}
   .date-card .desc{font-size:11px; color:var(--paper-dim); margin-top:6px; line-height:1.4;}
   .date-card .row-actions{margin-top:10px;}
 
@@ -152,7 +168,7 @@
   #slideover{position:fixed; top:0; right:-420px; width:380px; max-width:92vw; height:100%; background:var(--concrete); border-left:1px solid var(--line); z-index:901; transition:right .25s ease; padding:20px; overflow-y:auto;}
   #slideover.active{right:0;}
   #slideover .close-btn{float:right; background:none; border:none; color:var(--paper-dim); font-size:18px; cursor:pointer;}
-  #slideover h2{font-family:'Oswald',sans-serif; font-size:19px; color:var(--amber); clear:both; padding-top:6px; margin-bottom:14px;}
+  #slideover h2{font-family:var(--font-display); font-size:19px; color:var(--amber); clear:both; padding-top:6px; margin-bottom:14px;}
   .form-row{margin-bottom:12px;}
   .form-actions{display:flex; gap:8px; margin-top:18px;}
   .loading{color:var(--paper-dim); font-size:11px; padding:20px; text-align:center;}
@@ -164,7 +180,7 @@
 
 <div id="login-screen">
   <button class="theme-toggle" id="theme-toggle-login" onclick="toggleTheme()" style="position:absolute; top:16px; right:16px;">☾ Dark</button>
-  <div class="brand-mark"><span class="num display">KG13</span><span class="sub">internal · members only</span></div>
+  <div class="brand-mark"><img class="brand-logo" src="kg13-logo.jpeg" alt="KG13"><span class="num display">KG13</span><span class="sub">internal · members only</span></div>
   <div class="login-box">
     <div id="auth-error" class="err-msg" style="display:none;"></div>
     <label class="field-label">Email</label>
@@ -180,6 +196,7 @@
 <div id="app">
   <header>
     <div class="header-left">
+      <img class="header-logo" src="kg13-logo.jpeg" alt="KG13">
       <span class="num display">KG13</span>
       <span class="role-pill" id="role-pill">—</span>
     </div>
@@ -768,7 +785,7 @@ function openGearHistory(id) {
     <div class="side-row"><span class="side-label">Location</span><span>${locName(g.location_id)}</span></div>
     <div class="side-row"><span class="side-label">Status</span><span>${statusLabel(g.status)}</span></div>
     ${canEdit ? `
-      <h3 style="margin-top:18px;font-family:'Oswald',sans-serif;font-size:13px;color:var(--amber);">Log an entry</h3>
+      <h3 style="margin-top:18px;font-family:var(--font-display);font-size:13px;color:var(--amber);">Log an entry</h3>
       <div class="form-row"><label class="field-label">Type</label>
         <select id="f-ev-type" onchange="toggleEventLocation()">
           <option value="fixed">Fixed / serviced</option>
@@ -781,7 +798,7 @@ function openGearHistory(id) {
       <div class="form-row"><label class="field-label">Note</label><textarea id="f-ev-note" rows="2" placeholder="What happened?"></textarea></div>
       <div class="form-actions"><button class="btn" onclick='addGearEvent(${JSON.stringify(id)})'>Add to log</button></div>
     ` : ''}
-    <h3 style="margin-top:18px;font-family:'Oswald',sans-serif;font-size:13px;color:var(--amber);">History (${events.length})</h3>
+    <h3 style="margin-top:18px;font-family:var(--font-display);font-size:13px;color:var(--amber);">History (${events.length})</h3>
     <div class="timeline">${timeline}</div>
   `);
 }
