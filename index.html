@@ -208,7 +208,8 @@
   <nav>
     <button class="nav-item active" data-view="map">Map</button>
     <button class="nav-item" data-view="locations">Locations</button>
-    <button class="nav-item" data-view="people">People</button>
+    <button class="nav-item" data-view="crew">Core Crew</button>
+    <button class="nav-item" data-view="people">Contacts</button>
     <button class="nav-item" data-view="dates">Dates</button>
     <button class="nav-item" data-view="gear">Gear</button>
   </nav>
@@ -231,9 +232,19 @@
       <div class="table-wrap"><table><thead><tr><th>Name</th><th>Address</th><th>Description</th><th>Capacity</th><th>Status</th><th></th></tr></thead><tbody id="locations-table"></tbody></table></div>
     </section>
 
+    <section class="view" id="view-crew">
+      <div class="view-header"><div><div class="view-title display">Core Crew</div><div class="view-sub" id="crew-count">Loading…</div></div>
+        <button class="btn small" id="crew-add-btn" onclick="openPersonForm(null, true)" style="display:none;">+ Add Crew</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Nationality</th><th>Contact</th><th>Links</th><th></th></tr></thead><tbody id="crew-table"></tbody></table></div>
+
+      <div class="view-title display" style="font-size:15px; margin-top:26px;">kg13tlv Artists</div>
+      <div class="view-sub" id="artists-count">Loading…</div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Genre</th><th>Status</th><th>Links</th></tr></thead><tbody id="artists-table"></tbody></table></div>
+    </section>
+
     <section class="view" id="view-people">
-      <div class="view-header"><div><div class="view-title display">People</div><div class="view-sub" id="people-count">Loading…</div></div>
-        <button class="btn small" id="people-add-btn" onclick="openPersonForm()" style="display:none;">+ Add Person</button></div>
+      <div class="view-header"><div><div class="view-title display">Contacts</div><div class="view-sub" id="people-count">Loading…</div></div>
+        <button class="btn small" id="people-add-btn" onclick="openPersonForm()" style="display:none;">+ Add Contact</button></div>
       <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Nationality</th><th>Contact</th><th>Links</th><th></th></tr></thead><tbody id="people-table"></tbody></table></div>
     </section>
 
@@ -263,12 +274,20 @@ const SUPABASE_URL = "https://ejoicnbmtzthpnckfnao.supabase.co";
 const SUPABASE_KEY = "sb_publishable_FPXt5zqgK9vJMlM8ogoIQg_2e7Mj-GS";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// The artist roster lives in the public site's project, not this one. Its
+// artists table is world-readable (the marketing site renders it anonymously),
+// so this publishable key grants nothing a visitor to kg13tlv.com lacks.
+const PUBLIC_SITE_URL = "https://jaorrputjdmdwxgyjzqu.supabase.co";
+const PUBLIC_SITE_KEY = "sb_publishable_x3_ldq36Lv7dhAk8ppkoJg_SWfd_vx9";
+const sbPublic = supabase.createClient(PUBLIC_SITE_URL, PUBLIC_SITE_KEY);
+
 let currentProfile = null;
 let currentEmail = null;
 const collapsedGroups = new Set();
 let authMode = 'signin'; // 'signin' | 'signup'
 let map, mapMarkers = [];
-let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [] };
+let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [] };
+let artistsError = null;
 
 // ============ AUTH ============
 function toggleAuthMode() {
@@ -336,6 +355,7 @@ async function onSignedIn(session) {
   document.getElementById('loc-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
   document.getElementById('people-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
   document.getElementById('group-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
+  document.getElementById('crew-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
   await loadAll();
 }
 
@@ -366,8 +386,22 @@ async function loadAll() {
   cache.dates = datesRes.data || [];
   cache.groups = groupRes.data || [];
   cache.events = eventRes.data || [];
+
+  // Read outside the Promise.all above: this crosses into the public site's
+  // project, and the Core Crew list must still render if that is unreachable.
+  try {
+    const { data, error } = await sbPublic.from('artists').select('*').order('name');
+    if (error) throw error;
+    cache.artists = data || [];
+    artistsError = null;
+  } catch (e) {
+    cache.artists = [];
+    artistsError = e.message || 'could not be reached';
+  }
   renderLocationsTable();
   renderPeopleTable();
+  renderCoreCrewTable();
+  renderArtistsTable();
   renderGearTable();
   renderDates();
   initMapIfNeeded();
@@ -690,19 +724,63 @@ function renderLinkIcons(links) {
   return items.length ? `<div class="link-icons">${items.join('')}</div>` : '<span class="empty">—</span>';
 }
 
-function renderPeopleTable() {
-  document.getElementById('people-count').textContent = cache.people.length + ' on record';
-  const canEdit = currentProfile?.role === 'core';
-  document.getElementById('people-table').innerHTML = cache.people.map(p => `
-    <tr><td>${p.name}</td><td>${p.role || ''}${p.tag ? ' · ' + p.tag : ''}</td><td>${p.nationality || '—'}</td><td>${p.contact || '—'}</td><td>${renderLinkIcons(p.links)}</td>
-    <td>${canEdit ? `<div class="row-actions"><button class="icon-btn" onclick='openPersonForm(${JSON.stringify(p.id)})'>Edit</button><button class="icon-btn danger" onclick='deletePerson(${JSON.stringify(p.id)})'>Del</button></div>` : ''}</td></tr>`).join('');
+function personRowHtml(p, canEdit) {
+  return `<tr><td>${p.name}</td><td>${p.role || ''}${p.tag ? ' · ' + p.tag : ''}</td><td>${p.nationality || '—'}</td><td>${p.contact || '—'}</td><td>${renderLinkIcons(p.links)}</td>
+    <td>${canEdit ? `<div class="row-actions"><button class="icon-btn" onclick='openPersonForm(${JSON.stringify(p.id)})'>Edit</button><button class="icon-btn danger" onclick='deletePerson(${JSON.stringify(p.id)})'>Del</button></div>` : ''}</td></tr>`;
 }
 
-function openPersonForm(id) {
+// Contacts and Core Crew are a clean split of the same table — a person shows
+// up in exactly one of them.
+function renderPeopleTable() {
+  const rows = cache.people.filter(p => !p.core);
+  document.getElementById('people-count').textContent = rows.length + ' on record';
+  const canEdit = currentProfile?.role === 'core';
+  document.getElementById('people-table').innerHTML = rows.length
+    ? rows.map(p => personRowHtml(p, canEdit)).join('')
+    : '<tr><td colspan="6" class="empty">No contacts yet.</td></tr>';
+}
+
+function renderCoreCrewTable() {
+  const rows = cache.people.filter(p => p.core);
+  document.getElementById('crew-count').textContent = rows.length + ' on the crew';
+  const canEdit = currentProfile?.role === 'core';
+  document.getElementById('crew-table').innerHTML = rows.length
+    ? rows.map(p => personRowHtml(p, canEdit)).join('')
+    : '<tr><td colspan="6" class="empty">Nobody flagged as Core Crew yet.</td></tr>';
+}
+
+// Read-only mirror of the roster on kg13tlv.com. The three URL columns are
+// reshaped into the links object renderLinkIcons already understands, so
+// artists get the same icon treatment as people — and safeUrl quietly drops
+// values that are not real URLs.
+function renderArtistsTable() {
+  const el = document.getElementById('artists-table');
+  const count = document.getElementById('artists-count');
+  if (!el || !count) return;
+  if (artistsError) {
+    count.textContent = 'Roster unavailable — ' + artistsError;
+    el.innerHTML = '<tr><td colspan="4" class="empty">Could not reach kg13tlv.com.</td></tr>';
+    return;
+  }
+  count.textContent = `${cache.artists.length} on the public roster · managed on kg13tlv.com`;
+  el.innerHTML = cache.artists.length ? cache.artists.map(a => {
+    const links = {
+      soundcloud: a.soundcloud_url, bandcamp: a.bandcamp_url, instagram: a.instagram_url,
+    };
+    const active = (a.status || '').toLowerCase() === 'active';
+    return `<tr><td>${a.name}</td><td>${a.genre || '—'}</td>
+      <td><span class="status-tag ${active ? 'status-ok' : 'status-neutral'}">${active ? 'Active' : 'Inactive'}</span></td>
+      <td>${renderLinkIcons(links)}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">No artists on the public roster.</td></tr>';
+}
+
+function openPersonForm(id, presetCore) {
   const p = id ? cache.people.find(x => x.id === id) : null;
+  const isCore = p ? !!p.core : !!presetCore;
   const locOptions = cache.locations.map(l => `<option value="${l.id}" ${p?.location_id===l.id?'selected':''}>${l.name}</option>`).join('');
   showSlideover(`
-    <h2>${p ? 'Edit' : 'Add'} Person</h2>
+    <h2>${p ? 'Edit' : 'Add'} ${isCore ? 'Crew Member' : 'Contact'}</h2>
+    <div class="form-row"><label class="field-label"><input type="checkbox" id="f-core" ${isCore ? 'checked' : ''} style="width:auto;margin-right:8px;vertical-align:middle;">Core Crew</label></div>
     <div class="form-row"><label class="field-label">Name</label><input id="f-name" value="${p?.name || ''}"></div>
     <div class="form-row"><label class="field-label">Role</label><input id="f-role" value="${p?.role || ''}" placeholder="Crew / Lineup / Ally / Org"></div>
     <div class="form-row"><label class="field-label">Tag</label><input id="f-tag" value="${p?.tag || ''}"></div>
@@ -722,6 +800,7 @@ async function savePerson(id) {
     nationality: document.getElementById('f-nat').value.trim() || null,
     contact: document.getElementById('f-contact').value.trim() || null,
     location_id: document.getElementById('f-loc').value || null,
+    core: document.getElementById('f-core').checked,
   };
   // Start from what's already stored so link types added directly in the
   // database (outside the seven below) survive an edit here.
