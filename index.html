@@ -505,6 +505,7 @@ async function deleteLocation(id) {
 // ============ PEOPLE ============
 // ---- contact links (icon-only) ----
 const LINK_PLATFORMS = [
+  { key: 'email',      label: 'Email' },
   { key: 'soundcloud', label: 'SoundCloud' },
   { key: 'mixcloud',   label: 'Mixcloud' },
   { key: 'bandcamp',   label: 'Bandcamp' },
@@ -515,6 +516,7 @@ const LINK_PLATFORMS = [
 ];
 
 const LINK_ICONS = {
+  email:      '<svg viewBox="0 0 24 24"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm9 8.2L4.6 7H19.4L12 13.2zM4 9.1V17h16V9.1l-8 6.7-8-6.7z"/></svg>',
   soundcloud: '<svg viewBox="0 0 24 24"><path d="M1 14v4h1v-4H1zm3-2v6h1v-6H4zm3-3v9h1V9H7zm3-3v12h1V6h-1zm4 12h6a3 3 0 0 0 0-6 5 5 0 0 0-6-4.9V18z"/></svg>',
   mixcloud:   '<svg viewBox="0 0 24 24"><path d="M6 18a4.5 4.5 0 0 1 .7-9A5.5 5.5 0 0 1 17.3 9.7 4 4 0 0 1 17 18H6z"/></svg>',
   bandcamp:   '<svg viewBox="0 0 24 24"><path d="M2 17.5 8.5 6.5H22L15.5 17.5H2z"/></svg>',
@@ -553,15 +555,23 @@ function safeUrl(v) {
   }
 }
 
+// Email is stored as a plain address and rendered as mailto:. safeUrl
+// deliberately rejects mailto:, so it needs its own check.
+function safeEmail(v) {
+  const addr = String(v || '').trim().replace(/^mailto:/i, '');
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr) ? 'mailto:' + addr : null;
+}
+
 function renderLinkIcons(links) {
   const l = links || {};
   const items = Object.keys(l).map(key => {
-    const url = safeUrl(l[key]);
+    const url = key === 'email' ? safeEmail(l[key]) : safeUrl(l[key]);
     if (!url) return '';
     const meta = LINK_PLATFORMS.find(x => x.key === key);
     const label = meta ? meta.label : key;
     const icon = LINK_ICONS[key] || LINK_ICONS.website;
-    return `<a class="link-icon" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${icon}</a>`;
+    const newTab = key === 'email' ? '' : ' target="_blank" rel="noopener noreferrer"';
+    return `<a class="link-icon" href="${escapeAttr(url)}"${newTab} title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${icon}</a>`;
   }).filter(Boolean);
   return items.length ? `<div class="link-icons">${items.join('')}</div>` : '<span class="empty">—</span>';
 }
@@ -585,7 +595,7 @@ function openPersonForm(id) {
     <div class="form-row"><label class="field-label">Nationality</label><input id="f-nat" value="${p?.nationality || ''}"></div>
     <div class="form-row"><label class="field-label">Contact</label><input id="f-contact" value="${p?.contact || ''}"></div>
     <div class="form-row"><label class="field-label">Based at</label><select id="f-loc"><option value="">—</option>${locOptions}</select></div>
-    ${LINK_PLATFORMS.map(pl => `<div class="form-row"><label class="field-label">${pl.label}</label><input id="f-link-${pl.key}" value="${escapeAttr((p?.links || {})[pl.key] || '')}" placeholder="https://"></div>`).join('')}
+    ${LINK_PLATFORMS.map(pl => `<div class="form-row"><label class="field-label">${pl.label}</label><input id="f-link-${pl.key}" value="${escapeAttr((p?.links || {})[pl.key] || '')}" placeholder="${pl.key === 'email' ? 'name@domain.com' : 'soundcloud.com/…'}"></div>`).join('')}
     <div class="form-actions"><button class="btn" onclick='savePerson(${JSON.stringify(id||null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
   `);
 }
