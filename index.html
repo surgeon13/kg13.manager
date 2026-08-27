@@ -206,15 +206,15 @@
     </div>
   </header>
   <nav>
-    <button class="nav-item active" data-view="map">Map</button>
+    <button class="nav-item active" data-view="crew">Core Crew</button>
+    <button class="nav-item" data-view="gear">Gear</button>
+    <button class="nav-item" data-view="map">Map</button>
     <button class="nav-item" data-view="locations">Locations</button>
-    <button class="nav-item" data-view="crew">Core Crew</button>
     <button class="nav-item" data-view="people">Contacts</button>
     <button class="nav-item" data-view="dates">Dates</button>
-    <button class="nav-item" data-view="gear">Gear</button>
   </nav>
   <main>
-    <section class="view active" id="view-map">
+    <section class="view" id="view-map">
       <div class="view-title display">Location Map</div>
       <div class="view-sub">Pin numbers show gear count · tap for details · Core Crew can drag a pin to move a site</div>
       <div class="map-wrap">
@@ -232,7 +232,7 @@
       <div class="table-wrap"><table><thead><tr><th>Name</th><th>Address</th><th>Description</th><th>Capacity</th><th>Status</th><th></th></tr></thead><tbody id="locations-table"></tbody></table></div>
     </section>
 
-    <section class="view" id="view-crew">
+    <section class="view active" id="view-crew">
       <div class="view-header"><div><div class="view-title display">Core Crew</div><div class="view-sub" id="crew-count">Loading…</div></div>
         <button class="btn small" id="crew-add-btn" onclick="openPersonForm(null, true)" style="display:none;">+ Add Crew</button></div>
       <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Nationality</th><th>Contact</th><th>Links</th><th></th></tr></thead><tbody id="crew-table"></tbody></table></div>
@@ -366,7 +366,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     btn.classList.add('active');
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
-    if (btn.dataset.view === 'map' && map) setTimeout(() => map.invalidateSize(), 50);
+    if (btn.dataset.view === 'map') setTimeout(revealMap, 50);
   });
 });
 
@@ -422,6 +422,26 @@ function locName(id) { const l = cache.locations.find(x => x.id === id); return 
 let kgTiles = null;
 let mapFitted = false;
 let pickerMap = null, pickerMarker = null;
+
+function mapIsVisible() {
+  const view = document.getElementById('view-map');
+  return !!view && view.classList.contains('active');
+}
+
+// Called when the Map tab is opened: Leaflet has to re-measure after being
+// unhidden, and the initial fit is deferred until now if it was skipped.
+function revealMap() {
+  if (!map) return;
+  map.invalidateSize();
+  if (mapFitted) return;
+  const points = cache.locations
+    .filter(l => l.lat !== null && l.lng !== null)
+    .map(l => [l.lat, l.lng]);
+  if (points.length) {
+    map.fitBounds(L.latLngBounds(points).pad(0.35), { maxZoom: 16 });
+    mapFitted = true;
+  }
+}
 
 // Centre a fresh pick on the middle of the sites we already know about,
 // which is far more useful than a hardcoded city centre.
@@ -513,7 +533,7 @@ function refreshMapMarkers() {
     mapMarkers.push(marker);
     points.push([loc.lat, loc.lng]);
   });
-  if (points.length && !mapFitted) {
+  if (points.length && !mapFitted && mapIsVisible()) {
     map.fitBounds(L.latLngBounds(points).pad(0.35), { maxZoom: 16 });
     mapFitted = true;
   }
