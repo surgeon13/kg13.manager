@@ -252,6 +252,10 @@
       <div class="view-header"><div><div class="view-title display">Fixed Dates</div><div class="view-sub">Recurring annually — day &amp; month</div></div>
         <button class="btn small" onclick="openDateForm()">+ Add Date</button></div>
       <div class="date-strip" id="dates-strip"></div>
+
+      <div class="view-title display" style="font-size:15px; margin-top:26px;">Upcoming on kg13tlv.com</div>
+      <div class="view-sub" id="site-events-count">Loading…</div>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Where</th><th>Lineup</th></tr></thead><tbody id="site-events-table"></tbody></table></div>
     </section>
 
     <section class="view" id="view-gear">
@@ -286,8 +290,9 @@ let currentEmail = null;
 const collapsedGroups = new Set();
 let authMode = 'signin'; // 'signin' | 'signup'
 let map, mapMarkers = [];
-let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [] };
+let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [], siteEvents: [] };
 let artistsError = null;
+let siteEventsError = null;
 
 // ============ AUTH ============
 function toggleAuthMode() {
@@ -398,10 +403,31 @@ async function loadAll() {
     cache.artists = [];
     artistsError = e.message || 'could not be reached';
   }
+
+  // Upcoming gigs from the public site, with their lineup pulled through the
+  // event_artists join in the same query. Same reasoning as the artist roster:
+  // a failure here must not take the rest of the view down.
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await sbPublic
+      .from('events')
+      .select('*, event_artists(artists(name))')
+      .gte('event_date', today)
+      .order('event_date', { ascending: true });
+    if (error) throw error;
+    cache.siteEvents = (data || []).map(e => Object.assign({}, e, {
+      lineup: (e.event_artists || []).map(r => r.artists && r.artists.name).filter(Boolean),
+    }));
+    siteEventsError = null;
+  } catch (e) {
+    cache.siteEvents = [];
+    siteEventsError = e.message || 'could not be reached';
+  }
   renderLocationsTable();
   renderPeopleTable();
   renderCoreCrewTable();
   renderArtistsTable();
+  renderSiteEvents();
   renderGearTable();
   renderDates();
   initMapIfNeeded();
@@ -1171,6 +1197,28 @@ async function deleteGear(id) {
 }
 
 // ============ DATES ============
+// Read-only mirror of the public site's event calendar. Those are one-off
+// dated gigs; the strip above is recurring annual dates, so they sit together
+// without overlapping.
+function renderSiteEvents() {
+  const el = document.getElementById('site-events-table');
+  const count = document.getElementById('site-events-count');
+  if (!el || !count) return;
+  if (siteEventsError) {
+    count.textContent = 'Unavailable — ' + siteEventsError;
+    el.innerHTML = '<tr><td colspan="4" class="empty">Could not reach kg13tlv.com.</td></tr>';
+    return;
+  }
+  count.textContent = `${cache.siteEvents.length} upcoming · managed on kg13tlv.com`;
+  el.innerHTML = cache.siteEvents.length ? cache.siteEvents.map(e => {
+    const where = [e.location, e.city].filter(Boolean).join(', ');
+    const lineup = e.lineup.length
+      ? e.lineup.map(n => `<span class="chip">${n}</span>`).join('')
+      : '<span class="empty">—</span>';
+    return `<tr><td>${new Date(e.event_date).toLocaleDateString()}</td><td>${e.name}</td><td>${where || '—'}</td><td>${lineup}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">No upcoming events on the site.</td></tr>';
+}
+
 function renderDates() {
   document.getElementById('dates-strip').innerHTML = cache.dates.map(d => `
     <div class="date-card">
