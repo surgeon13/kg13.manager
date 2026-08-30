@@ -1,0 +1,7 @@
+# Chrome will not install a web app if the manifest comes back as
+# application/octet-stream, which is what this host serves it as by default —
+# .webmanifest is not in cPanel's MIME table. Without this the home-screen
+# icons ship but never get used.
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>
