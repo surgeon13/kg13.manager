@@ -251,6 +251,7 @@
     <button class="nav-item" data-view="locations">Locations</button>
     <button class="nav-item" data-view="people">Contacts</button>
     <button class="nav-item" data-view="dates">Dates</button>
+    <button class="nav-item" id="nav-bin" data-view="bin" style="display:none;">Bin</button>
   </nav>
   <main>
     <section class="view" id="view-map">
@@ -308,6 +309,13 @@
         <div class="header-actions"><button class="btn small ghost" id="merch-group-add-btn" onclick="createMerchGroup()" style="display:none;">+ New Product</button><button class="btn small" id="merch-add-btn" onclick="openMerchForm()" style="display:none;">+ Add Merch</button></div></div>
       <div class="table-wrap"><table><thead><tr><th>Item</th><th>Size</th><th>Colour</th><th>Qty</th><th>Location</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody id="merch-table"></tbody></table></div>
     </section>
+
+    <section class="view" id="view-bin">
+      <div class="view-header"><div><div class="view-title display">Bin</div><div class="view-sub" id="bin-count">Loading…</div></div>
+        <button class="btn small ghost" id="bin-empty-btn" onclick="emptyBin()">Empty bin</button></div>
+      <div class="view-sub" style="margin-bottom:12px;">Deleted records are kept here until someone removes them for good. Restoring puts a record back exactly where it was.</div>
+      <div class="table-wrap"><table><thead><tr><th>Type</th><th>Name</th><th>Detail</th><th>Deleted</th><th>By</th><th></th></tr></thead><tbody id="bin-table"></tbody></table></div>
+    </section>
   </main>
 </div>
 
@@ -337,7 +345,7 @@ const collapsedMerchGroups = new Set();
 let authMode = 'signin'; // 'signin' | 'signup'
 let map, mapMarkers = [];
 let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [], siteEvents: [],
-  merch: [], merchGroups: [], merchEvents: [] };
+  merch: [], merchGroups: [], merchEvents: [], bin: [] };
 let artistsError = null;
 let siteEventsError = null;
 
@@ -412,6 +420,8 @@ async function onSignedIn(session) {
   // than let a member fill a form that cannot save.
   document.getElementById('merch-group-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
   document.getElementById('merch-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
+  // The Bin is a Core Crew tool: it exposes what was removed and undoes it.
+  document.getElementById('nav-bin').style.display = profile.role === 'core' ? 'block' : 'none';
   await loadAll();
 }
 
@@ -429,14 +439,17 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 // ============ DATA LOADING ============
 async function loadAll() {
   const [locRes, peopleRes, gearRes, datesRes, groupRes, eventRes, merchRes, merchGroupRes, merchEventRes] = await Promise.all([
-    sb.from('locations').select('*').order('name'),
-    sb.from('people').select('*').order('name'),
-    sb.from('gear').select('*').order('item'),
-    sb.from('event_dates').select('*').order('month').order('day'),
-    sb.from('gear_groups').select('*').order('name'),
+    // deleted_at is null everywhere: a binned record must disappear from every
+    // list, count, map pin and picker, and filtering at load does that once
+    // rather than in each renderer.
+    sb.from('locations').select('*').is('deleted_at', null).order('name'),
+    sb.from('people').select('*').is('deleted_at', null).order('name'),
+    sb.from('gear').select('*').is('deleted_at', null).order('item'),
+    sb.from('event_dates').select('*').is('deleted_at', null).order('month').order('day'),
+    sb.from('gear_groups').select('*').is('deleted_at', null).order('name'),
     sb.from('gear_events').select('*').order('created_at', { ascending: false }).limit(1000),
-    sb.from('merch').select('*').order('name'),
-    sb.from('merch_groups').select('*').order('name'),
+    sb.from('merch').select('*').is('deleted_at', null).order('name'),
+    sb.from('merch_groups').select('*').is('deleted_at', null).order('name'),
     sb.from('merch_events').select('*').order('created_at', { ascending: false }).limit(1000),
   ]);
   cache.locations = locRes.data || [];
@@ -485,9 +498,11 @@ async function loadAll() {
   renderCoreCrewTable();
   renderArtistsTable();
   renderSiteEvents();
+  await loadBin();
   renderGearTable();
   renderMerchTable();
   renderDates();
+  renderBin();
   initMapIfNeeded();
   refreshMapMarkers();
 }
@@ -501,6 +516,18 @@ function toast(msg, isError = false) {
 }
 
 function locName(id) { const l = cache.locations.find(x => x.id === id); return l ? l.name : '—'; }
+
+// ============ SOFT DELETE ============
+// Deleting stamps the row instead of removing it, so it can be restored from
+// the Bin. Every load filters deleted_at is null, so a stamped row vanishes
+// from the app the moment this returns.
+async function softDelete(table, match) {
+  const patch = { deleted_at: new Date().toISOString(), deleted_by: currentEmail };
+  let q = sb.from(table).update(patch);
+  Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
+  const { error } = await q;
+  return error;
+}
 
 // ============ MAP ============
 let kgTiles = null;
@@ -747,10 +774,10 @@ async function saveLocation(id) {
 }
 
 async function deleteLocation(id) {
-  if (!confirm('Delete this location? This cannot be undone.')) return;
-  const { error } = await sb.from('locations').delete().eq('id', id);
+  if (!confirm('Delete this location?\n\nIt moves to the Bin and can be restored from there.')) return;
+  const error = await softDelete('locations', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Location deleted');
+  toast('Location moved to the Bin');
   await loadAll();
 }
 
@@ -928,10 +955,10 @@ async function savePerson(id) {
 }
 
 async function deletePerson(id) {
-  if (!confirm('Delete this person? This cannot be undone.')) return;
-  const { error } = await sb.from('people').delete().eq('id', id);
+  if (!confirm('Delete this person?\n\nThey move to the Bin and can be restored from there.')) return;
+  const error = await softDelete('people', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Person deleted');
+  toast('Moved to the Bin');
   await loadAll();
 }
 
@@ -1045,7 +1072,10 @@ function renderGearTable() {
     real: true,
     items: cache.gear.filter(g => g.group_id === grp.id),
   }));
-  const loose = cache.gear.filter(g => !g.group_id);
+  // An item whose group is in the Bin still carries that group_id. Without
+  // this it would match no bucket and disappear from the table entirely.
+  const liveGroups = new Set(cache.groups.map(g => g.id));
+  const loose = cache.gear.filter(g => !g.group_id || !liveGroups.has(g.group_id));
   if (loose.length) buckets.push({ id: '__none', name: 'Ungrouped', real: false, items: loose });
 
   let html = '';
@@ -1128,15 +1158,19 @@ async function saveGroup(id) {
   await loadAll();
 }
 
-// Keeps the gear, drops the container. The FK is ON DELETE SET NULL, so the
-// items reappear under "Ungrouped".
+// Keeps the gear, drops the container. The group is only stamped now rather
+// than deleted, so ON DELETE SET NULL never fires -- the children have to be
+// detached explicitly, or they would follow the group into the Bin's shadow.
+// Restoring the group therefore brings it back empty, which the prompt says.
 async function ungroupAll(id) {
   const grp = cache.groups.find(g => g.id === id);
   const count = cache.gear.filter(g => g.group_id === id).length;
-  if (!confirm(`Ungroup "${grp ? grp.name : ''}"?\n\nThe group is removed and its ${count} item${count === 1 ? '' : 's'} become Ungrouped. No gear is deleted.`)) return;
-  const { error } = await sb.from('gear_groups').delete().eq('id', id);
+  if (!confirm(`Ungroup "${grp ? grp.name : ''}"?\n\nThe group moves to the Bin and its ${count} item${count === 1 ? '' : 's'} become Ungrouped. No gear is deleted.\n\nRestoring the group later brings it back empty.`)) return;
+  const { error: detachErr } = await sb.from('gear').update({ group_id: null }).eq('group_id', id);
+  if (detachErr) { toast(detachErr.message, true); return; }
+  const error = await softDelete('gear_groups', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Group removed, gear kept');
+  toast('Group moved to the Bin, gear kept');
   await loadAll();
 }
 
@@ -1148,12 +1182,12 @@ async function deleteGroupAndGear(id) {
   const names = items.slice(0, 8).map(g => ' · ' + g.item).join('\n');
   const more = items.length > 8 ? `\n · …and ${items.length - 8} more` : '';
   if (!items.length) { await ungroupAll(id); return; }
-  if (!confirm(`Delete "${grp ? grp.name : ''}" AND all ${items.length} items in it?\n${names}${more}\n\nThis deletes the gear itself, along with its history. It cannot be undone.\n\nTo keep the gear and only remove the group, cancel and use Ungroup instead.`)) return;
-  const { error: gearErr } = await sb.from('gear').delete().eq('group_id', id);
+  if (!confirm(`Delete "${grp ? grp.name : ''}" AND all ${items.length} items in it?\n${names}${more}\n\nThe group and its gear move to the Bin together, and each can be restored from there.\n\nTo keep the gear and only remove the group, cancel and use Ungroup instead.`)) return;
+  const gearErr = await softDelete('gear', { group_id: id });
   if (gearErr) { toast(gearErr.message, true); return; }
-  const { error } = await sb.from('gear_groups').delete().eq('id', id);
+  const error = await softDelete('gear_groups', { id });
   if (error) { toast(error.message, true); return; }
-  toast(`Deleted group and ${items.length} item${items.length === 1 ? '' : 's'}`);
+  toast(`Group and ${items.length} item${items.length === 1 ? '' : 's'} moved to the Bin`);
   await loadAll();
 }
 
@@ -1247,10 +1281,10 @@ async function saveGear(id) {
 }
 
 async function deleteGear(id) {
-  if (!confirm('Delete this gear item? This cannot be undone.')) return;
-  const { error } = await sb.from('gear').delete().eq('id', id);
+  if (!confirm('Delete this gear item?\n\nIt moves to the Bin, with its history, and can be restored from there.')) return;
+  const error = await softDelete('gear', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Gear deleted');
+  toast('Gear moved to the Bin');
   await loadAll();
 }
 
@@ -1314,7 +1348,10 @@ function renderMerchTable() {
     real: true,
     items: cache.merch.filter(m => m.group_id === grp.id),
   }));
-  const loose = cache.merch.filter(m => !m.group_id);
+  // Same guard as the gear table: a line whose product is in the Bin must
+  // still show up somewhere rather than silently vanishing.
+  const liveGroups = new Set(cache.merchGroups.map(g => g.id));
+  const loose = cache.merch.filter(m => !m.group_id || !liveGroups.has(m.group_id));
   if (loose.length) buckets.push({ id: '__none', name: 'Ungrouped', real: false, items: loose });
 
   let html = '';
@@ -1399,10 +1436,12 @@ async function saveMerchGroup(id) {
 async function ungroupAllMerch(id) {
   const grp = cache.merchGroups.find(g => g.id === id);
   const count = cache.merch.filter(m => m.group_id === id).length;
-  if (!confirm(`Ungroup "${grp ? grp.name : ''}"?\n\nThe product is removed and its ${count} line${count === 1 ? '' : 's'} become Ungrouped. No stock is deleted.`)) return;
-  const { error } = await sb.from('merch_groups').delete().eq('id', id);
+  if (!confirm(`Ungroup "${grp ? grp.name : ''}"?\n\nThe product moves to the Bin and its ${count} line${count === 1 ? '' : 's'} become Ungrouped. No stock is deleted.\n\nRestoring the product later brings it back empty.`)) return;
+  const { error: detachErr } = await sb.from('merch').update({ group_id: null }).eq('group_id', id);
+  if (detachErr) { toast(detachErr.message, true); return; }
+  const error = await softDelete('merch_groups', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Product removed, stock kept');
+  toast('Product moved to the Bin, stock kept');
   await loadAll();
 }
 
@@ -1412,12 +1451,12 @@ async function deleteMerchGroupAndItems(id) {
   if (!items.length) { await ungroupAllMerch(id); return; }
   const names = items.slice(0, 8).map(m => ' · ' + m.name + (m.size ? ' (' + m.size + ')' : '')).join('\n');
   const more = items.length > 8 ? `\n · …and ${items.length - 8} more` : '';
-  if (!confirm(`Delete "${grp ? grp.name : ''}" AND all ${items.length} lines in it?\n${names}${more}\n\nThis deletes the stock itself, along with its history. It cannot be undone.\n\nTo keep the stock and only remove the product, cancel and use Ungroup instead.`)) return;
-  const { error: mErr } = await sb.from('merch').delete().eq('group_id', id);
+  if (!confirm(`Delete "${grp ? grp.name : ''}" AND all ${items.length} lines in it?\n${names}${more}\n\nThe product and its lines move to the Bin together, and each can be restored from there.\n\nTo keep the stock and only remove the product, cancel and use Ungroup instead.`)) return;
+  const mErr = await softDelete('merch', { group_id: id });
   if (mErr) { toast(mErr.message, true); return; }
-  const { error } = await sb.from('merch_groups').delete().eq('id', id);
+  const error = await softDelete('merch_groups', { id });
   if (error) { toast(error.message, true); return; }
-  toast(`Deleted product and ${items.length} line${items.length === 1 ? '' : 's'}`);
+  toast(`Product and ${items.length} line${items.length === 1 ? '' : 's'} moved to the Bin`);
   await loadAll();
 }
 
@@ -1583,10 +1622,10 @@ async function duplicateMerch(id) {
 }
 
 async function deleteMerch(id) {
-  if (!confirm('Delete this merch line? Its history goes with it. This cannot be undone.')) return;
-  const { error } = await sb.from('merch').delete().eq('id', id);
+  if (!confirm('Delete this merch line?\n\nIt moves to the Bin, with its history, and can be restored from there.')) return;
+  const error = await softDelete('merch', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Merch deleted');
+  toast('Merch moved to the Bin');
   await loadAll();
 }
 
@@ -1790,10 +1829,118 @@ async function saveDate(id) {
 }
 
 async function deleteDate(id) {
-  if (!confirm('Delete this date? This cannot be undone.')) return;
-  const { error } = await sb.from('event_dates').delete().eq('id', id);
+  if (!confirm('Delete this date?\n\nIt moves to the Bin and can be restored from there.')) return;
+  const error = await softDelete('event_dates', { id });
   if (error) { toast(error.message, true); return; }
-  toast('Date deleted');
+  toast('Date moved to the Bin');
+  await loadAll();
+}
+
+// ============ BIN ============
+// One recycling bin over every table that can be deleted. Each kind declares
+// how to read a row's title and its one-line detail, so adding a table later
+// is a single entry here rather than another branch in three functions.
+const BIN_KINDS = [
+  { table: 'locations',    label: 'Location', title: r => r.name,
+    detail: r => r.address || r.description || '' },
+  { table: 'people',       label: r => r.core ? 'Core Crew' : 'Contact', title: r => r.name,
+    detail: r => [r.role, r.nationality].filter(Boolean).join(' · ') },
+  { table: 'gear',         label: 'Gear', title: r => r.item,
+    detail: r => [r.detail, r.qty != null ? '×' + r.qty : null].filter(Boolean).join(' · ') },
+  { table: 'gear_groups',  label: 'Gear group', title: r => r.name, detail: r => r.note || '' },
+  { table: 'merch',        label: 'Merch', title: r => r.name,
+    detail: r => [r.size, r.meta].filter(Boolean).join(' · ') },
+  { table: 'merch_groups', label: 'Merch product', title: r => r.name, detail: r => r.note || '' },
+  { table: 'event_dates',  label: 'Date',
+    title: r => `${String(r.day).padStart(2, '0')}.${String(r.month).padStart(2, '0')}`,
+    detail: r => r.description || '' },
+];
+
+function binKindLabel(kind, row) {
+  return typeof kind.label === 'function' ? kind.label(row) : kind.label;
+}
+
+async function loadBin() {
+  // Members never see the Bin, so there is no reason to fetch it for them.
+  if (currentProfile?.role !== 'core') { cache.bin = []; return; }
+  const results = await Promise.all(BIN_KINDS.map(k =>
+    sb.from(k.table).select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false })));
+  const rows = [];
+  results.forEach((res, i) => {
+    const kind = BIN_KINDS[i];
+    (res.data || []).forEach(r => rows.push({
+      table: kind.table,
+      id: r.id,
+      label: binKindLabel(kind, r),
+      title: kind.title(r) || '(untitled)',
+      detail: kind.detail(r) || '',
+      deleted_at: r.deleted_at,
+      deleted_by: r.deleted_by || '',
+    }));
+  });
+  rows.sort((a, b) => String(b.deleted_at).localeCompare(String(a.deleted_at)));
+  cache.bin = rows;
+}
+
+function renderBin() {
+  const el = document.getElementById('bin-table');
+  const count = document.getElementById('bin-count');
+  if (!el || !count) return;
+  const emptyBtn = document.getElementById('bin-empty-btn');
+  if (emptyBtn) emptyBtn.style.display = cache.bin.length ? 'inline-block' : 'none';
+
+  count.textContent = cache.bin.length
+    ? `${cache.bin.length} deleted record${cache.bin.length === 1 ? '' : 's'}`
+    : 'Empty';
+  if (!cache.bin.length) {
+    el.innerHTML = '<tr><td colspan="6" class="empty">Nothing deleted. Items you remove will wait here.</td></tr>';
+    return;
+  }
+  el.innerHTML = cache.bin.map(b => `<tr>
+    <td><span class="status-tag status-neutral">${b.label}</span></td>
+    <td>${b.title}</td>
+    <td>${b.detail}</td>
+    <td>${whenLabel(b.deleted_at)}</td>
+    <td>${b.deleted_by}</td>
+    <td><div class="row-actions">
+      <button class="icon-btn" onclick='restoreFromBin(${JSON.stringify(b.table)}, ${JSON.stringify(b.id)})'>Restore</button>
+      <button class="icon-btn danger" onclick='purgeFromBin(${JSON.stringify(b.table)}, ${JSON.stringify(b.id)})'>Delete forever</button>
+    </div></td></tr>`).join('');
+}
+
+// Clearing the stamp is all it takes: every list filters on deleted_at is
+// null, so the record reappears wherever it used to be.
+async function restoreFromBin(table, id) {
+  const { error } = await sb.from(table).update({ deleted_at: null, deleted_by: null }).eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Restored');
+  await loadAll();
+}
+
+// The real delete, and the only one in the app. This is where the database's
+// cascades finally fire, taking the record's history with it.
+async function purgeFromBin(table, id) {
+  const entry = cache.bin.find(b => b.table === table && b.id === id);
+  const what = entry ? `"${entry.title}"` : 'this record';
+  if (!confirm(`Permanently delete ${what}?\n\nThis removes it and its history for good. It cannot be undone.`)) return;
+  const { error } = await sb.from(table).delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Deleted for good');
+  await loadAll();
+}
+
+async function emptyBin() {
+  const n = cache.bin.length;
+  if (!n) return;
+  if (!confirm(`Permanently delete all ${n} record${n === 1 ? '' : 's'} in the Bin?\n\nThis removes them and their history for good. It cannot be undone.`)) return;
+  // Grouped per table so this is one request per kind rather than one per row.
+  const byTable = {};
+  cache.bin.forEach(b => { (byTable[b.table] = byTable[b.table] || []).push(b.id); });
+  for (const [table, ids] of Object.entries(byTable)) {
+    const { error } = await sb.from(table).delete().in('id', ids);
+    if (error) { toast(`${table}: ${error.message}`, true); await loadAll(); return; }
+  }
+  toast(`Emptied the Bin — ${n} record${n === 1 ? '' : 's'} deleted`);
   await loadAll();
 }
 
