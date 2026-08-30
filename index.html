@@ -312,7 +312,7 @@
 
     <section class="view" id="view-bin">
       <div class="view-header"><div><div class="view-title display">Bin</div><div class="view-sub" id="bin-count">Loading…</div></div>
-        <button class="btn small ghost" id="bin-empty-btn" onclick="emptyBin()">Empty bin</button></div>
+        <button class="btn small ghost" id="bin-empty-btn" onclick="clearBin()">Clear bin</button></div>
       <div class="view-sub" style="margin-bottom:12px;">Deleted records are kept here until someone removes them for good. Restoring puts a record back exactly where it was.</div>
       <div class="table-wrap"><table><thead><tr><th>Type</th><th>Name</th><th>Detail</th><th>Deleted</th><th>By</th><th></th></tr></thead><tbody id="bin-table"></tbody></table></div>
     </section>
@@ -1929,7 +1929,7 @@ async function purgeFromBin(table, id) {
   await loadAll();
 }
 
-async function emptyBin() {
+async function clearBin() {
   const n = cache.bin.length;
   if (!n) return;
   if (!confirm(`Permanently delete all ${n} record${n === 1 ? '' : 's'} in the Bin?\n\nThis removes them and their history for good. It cannot be undone.`)) return;
@@ -1940,7 +1940,7 @@ async function emptyBin() {
     const { error } = await sb.from(table).delete().in('id', ids);
     if (error) { toast(`${table}: ${error.message}`, true); await loadAll(); return; }
   }
-  toast(`Emptied the Bin — ${n} record${n === 1 ? '' : 's'} deleted`);
+  toast(`Bin cleared — ${n} record${n === 1 ? '' : 's'} deleted`);
   await loadAll();
 }
 
