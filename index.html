@@ -4,7 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KG13 — Internal</title>
-<link rel="icon" href="kg13-logo.jpeg">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta name="theme-color" content="#0d0d0d">
+<meta name="apple-mobile-web-app-title" content="KG13 Admin">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -14,19 +19,43 @@
      gradient for anything flagged. Variable names are inherited from the
      old scheme so every existing rule picks these up unchanged. */
   :root {
+    /* The accent is one hue driving both shades, so cycling the colour is a
+       single number rather than eight hand-written hexes. The defaults are
+       the same red the old scheme hardcoded: #e03838 and #8f2323. */
+    --accent-h:0; --accent-s:73%; --accent-l:54.9%; --accent-dim-s:60.7%; --accent-dim-l:34.9%;
     --concrete:#161616; --concrete-deep:#0d0d0d; --concrete-light:#1f1f1f; --concrete-lighter:#2a2a2a;
     --paper:#fafafa; --paper-dim:#a3a3a3; --paper-faint:#6b6b6b;
-    --amber:#e03838; --amber-dim:#8f2323; --hazard:#c11f63; --hazard-bright:#ff0080; --ok-green:#1fc773; --line:#333333;
+    --amber:hsl(var(--accent-h) var(--accent-s) var(--accent-l));
+    --amber-dim:hsl(var(--accent-h) var(--accent-dim-s) var(--accent-dim-l));
+    --hazard:#c11f63; --hazard-bright:#ff0080; --ok-green:#1fc773; --line:#333333;
     --btn-text:#fafafa;
     --shadow-brutal:4px 4px 0 #000;
   }
   :root[data-theme="light"] {
+    /* Same hue, darker so it holds up on white — matching the old #d02020. */
+    --accent-s:73.3%; --accent-l:47.1%; --accent-dim-s:73.9%; --accent-dim-l:36.1%;
     --concrete:#ffffff; --concrete-deep:#fafafa; --concrete-light:#f0f0f0; --concrete-lighter:#e6e6e6;
     --paper:#0d0d0d; --paper-dim:#525252; --paper-faint:#8a8a8a;
-    --amber:#d02020; --amber-dim:#a01818; --hazard:#c11f63; --hazard-bright:#e6006f; --ok-green:#12915a; --line:#d4d4d4;
+    --hazard:#c11f63; --hazard-bright:#e6006f; --ok-green:#12915a; --line:#d4d4d4;
     --btn-text:#fafafa;
     --shadow-brutal:4px 4px 0 #0d0d0d;
   }
+  /* Clicking the logo cycles these, exactly as it does on kg13tlv.com.
+     Red is the default and carries no attribute. */
+  :root[data-accent="purple"] { --accent-h:280; }
+  :root[data-accent="green"]  { --accent-h:150; --accent-l:45%; }
+  :root[data-accent="blue"]   { --accent-h:210; }
+
+  /* The mark is a fixed image, so it follows by filter rather than by token.
+     These are the site's own rotations, so both logos land on the same hue. */
+  :root[data-accent="purple"] .kg-logo { filter:hue-rotate(280deg) saturate(1.5); }
+  :root[data-accent="green"]  .kg-logo { filter:hue-rotate(100deg) saturate(1.5); }
+  :root[data-accent="blue"]   .kg-logo { filter:hue-rotate(200deg) saturate(1.5); }
+  .logo-btn { background:none; border:0; padding:0; width:auto; line-height:0; cursor:pointer; display:block; }
+  .logo-btn:hover .kg-logo { transform:scale(1.08); }
+  .logo-btn:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+  .kg-logo { transition:filter .3s ease, transform .2s ease; }
+
   * { box-sizing:border-box; margin:0; padding:0; }
   body { background:var(--concrete-deep); color:var(--paper); font-family:'JetBrains Mono',monospace; min-height:100vh; transition:background .2s ease, color .2s ease; }
   .display { font-family:var(--font-display); font-weight:900; text-transform:uppercase; letter-spacing:-.02em; }
@@ -189,7 +218,7 @@
 
 <div id="login-screen">
   <button class="theme-toggle" id="theme-toggle-login" onclick="toggleTheme()" style="position:absolute; top:16px; right:16px;">☾ Dark</button>
-  <div class="brand-mark"><img class="brand-logo" src="kg13-logo.jpeg" alt="KG13"><span class="num display">KG13</span><span class="sub">internal · members only</span></div>
+  <div class="brand-mark"><button class="logo-btn" onclick="cycleAccent()" aria-label="Cycle accent colour" title="Cycle accent colour"><img class="brand-logo kg-logo" src="kg13-logo.jpeg" alt="KG13"></button><span class="num display">KG13</span><span class="sub">internal · members only</span></div>
   <div class="login-box">
     <div id="auth-error" class="err-msg" style="display:none;"></div>
     <label class="field-label">Email</label>
@@ -205,7 +234,7 @@
 <div id="app">
   <header>
     <div class="header-left">
-      <img class="header-logo" src="kg13-logo.jpeg" alt="KG13">
+      <button class="logo-btn" onclick="cycleAccent()" aria-label="Cycle accent colour" title="Cycle accent colour"><img class="header-logo kg-logo" src="kg13-logo.jpeg" alt="KG13"></button>
       <span class="num display">KG13</span>
       <span class="role-pill" id="role-pill">—</span>
     </div>
@@ -1765,7 +1794,30 @@ function initTheme() {
   applyTheme(preferred);
 }
 
+// The accent hue is a second, independent axis: dark/light is the reading
+// mode, this is the house colour. Same four the main site cycles through.
+const ACCENTS = ['red', 'purple', 'green', 'blue'];
+
+function applyAccent(accent) {
+  if (accent === 'red') document.documentElement.removeAttribute('data-accent');
+  else document.documentElement.setAttribute('data-accent', accent);
+}
+
+function cycleAccent() {
+  const current = document.documentElement.getAttribute('data-accent') || 'red';
+  const next = ACCENTS[(ACCENTS.indexOf(current) + 1) % ACCENTS.length];
+  try { localStorage.setItem('kg13-accent', next); } catch (e) { /* storage unavailable, accent just won't persist */ }
+  applyAccent(next);
+}
+
+function initAccent() {
+  let saved = null;
+  try { saved = localStorage.getItem('kg13-accent'); } catch (e) { /* storage unavailable */ }
+  applyAccent(ACCENTS.includes(saved) ? saved : 'red');
+}
+
 initTheme();
+initAccent();
 initAuthListener();
 </script>
 </body>
