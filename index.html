@@ -1297,7 +1297,7 @@ function merchRowHtml(m, canEdit) {
   return `<tr><td>${m.name}</td><td>${m.size || '—'}</td><td>${swatch(m.color)}</td><td>${m.qty ?? 0}</td>
     <td>${locName(m.location_id)}</td><td>${money(m.sale_price)}</td>
     <td><span class="status-tag ${merchStatusClass(m.status)}">${merchStatusLabel(m.status)}</span></td>
-    <td><div class="row-actions"><button class="icon-btn" onclick='openMerchHistory(${JSON.stringify(m.id)})'>Log</button>${canEdit ? `<button class="icon-btn" onclick='duplicateMerch(${JSON.stringify(m.id)})' title="Copy this line">Copy</button><button class="icon-btn" onclick='openMerchForm(${JSON.stringify(m.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteMerch(${JSON.stringify(m.id)})'>Del</button>` : ''}</div></td></tr>`;
+    <td><div class="row-actions"><button class="icon-btn" onclick='openMerchHistory(${JSON.stringify(m.id)})'>Log</button>${canEdit ? `<button class="icon-btn" onclick='duplicateMerch(${JSON.stringify(m.id)})' title="Duplicate this line">Duplicate</button><button class="icon-btn" onclick='openMerchForm(${JSON.stringify(m.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteMerch(${JSON.stringify(m.id)})'>Del</button>` : ''}</div></td></tr>`;
 }
 
 function renderMerchTable() {
@@ -1543,9 +1543,11 @@ async function saveMerch(id) {
 }
 
 // Adding the same product in another size or colour means retyping every
-// field, so this clones a line instead. The copy is named "<name> (copy)",
-// which sorts immediately after the original -- the table is ordered by name,
-// so it lands directly underneath without needing a position column.
+// field, so this duplicates a line instead. The new row is named
+// "<name> (copy)", which sorts immediately after the original -- the table is
+// ordered by name, so it lands directly underneath without needing a position
+// column. The suffix stays "(copy)" rather than "(duplicate)": it is the
+// shorter marker, and the row opens for renaming immediately anyway.
 //
 // Stock deliberately starts at zero rather than being copied: duplicating 20
 // units would invent inventory that no log entry accounts for, and the whole
@@ -1571,9 +1573,9 @@ async function duplicateMerch(id) {
   const newId = data?.id;
   if (newId) {
     await logMerchEvent({ merch_id: newId, event_type: 'created', to_location_id: payload.location_id,
-      to_status: payload.status, note: `Copied from "${m.name}"` });
+      to_status: payload.status, note: `Duplicated from "${m.name}"` });
   }
-  toast('Copied — set its size and stock');
+  toast('Duplicated — set its size and stock');
   await loadAll();
   // Open the copy straight away: duplicating is only ever a step towards
   // changing something on it.
