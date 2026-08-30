@@ -5,3 +5,18 @@
 <IfModule mod_mime.c>
   AddType application/manifest+json .webmanifest
 </IfModule>
+
+# This app is one unhashed index.html replaced in place on every deploy, so
+# there is no filename change to push a new version past a cache. Without
+# no-cache a browser can keep serving yesterday's console indefinitely.
+# no-cache still allows a 304, so an unchanged file costs almost nothing.
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header always set Cache-Control "no-cache"
+  </FilesMatch>
+
+  # Icons and the manifest keep stable names too, but change rarely.
+  <FilesMatch "\.(?:ico|png|jpe?g|svg|webmanifest)$">
+    Header always set Cache-Control "public, max-age=86400, must-revalidate"
+  </FilesMatch>
+</IfModule>
