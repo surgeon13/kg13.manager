@@ -116,6 +116,11 @@
   .tl-item.fixed:before { background:var(--ok-green); }
   .tl-item.used:before  { background:var(--paper-dim); }
   .tl-item.status:before{ background:var(--hazard-bright); }
+  .tl-item.sold:before  { background:var(--ok-green); }
+  .tl-item.made:before  { background:var(--amber); }
+  .tl-item.gifted:before{ background:var(--paper-dim); }
+  .tl-item.returned:before { background:var(--paper-dim); }
+  .tl-item.stock:before { background:var(--hazard-bright); }
   .tl-type { font-family:var(--font-display); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); }
   .tl-when { font-size:10px; color:var(--paper-faint); }
   .tl-body { font-size:11px; color:var(--paper); margin-top:3px; line-height:1.5; }
@@ -150,6 +155,10 @@
   td{padding:9px 10px; border-bottom:1px solid var(--line);}
   tr:hover td{background:var(--concrete-light);}
   .status-tag{font-size:9px; padding:2px 6px; letter-spacing:.06em; text-transform:uppercase;}
+  .swatch{display:inline-block; width:14px; height:14px; border:1px solid var(--line); vertical-align:-2px;}
+  .swatch-none{background:repeating-linear-gradient(45deg,var(--concrete-light),var(--concrete-light) 3px,var(--concrete) 3px,var(--concrete) 6px);}
+  .color-row{display:flex; gap:8px; align-items:center;}
+  .color-row input[type=color]{width:42px; height:38px; padding:2px; flex:0 0 auto; cursor:pointer;}
   .status-ok{color:var(--ok-green); border:1px solid #4a5c37;} .status-warn{color:var(--hazard-bright); border:1px solid var(--hazard);} .status-neutral{color:var(--paper-dim); border:1px solid var(--line);}
   .table-wrap{border:1px solid var(--line); overflow:auto; max-height:min(68vh, 640px); -webkit-overflow-scrolling:touch;}
   .row-actions{display:flex; gap:6px;}
@@ -208,6 +217,7 @@
   <nav>
     <button class="nav-item active" data-view="crew">Core Crew</button>
     <button class="nav-item" data-view="gear">Gear</button>
+    <button class="nav-item" data-view="merch">Merch</button>
     <button class="nav-item" data-view="map">Map</button>
     <button class="nav-item" data-view="locations">Locations</button>
     <button class="nav-item" data-view="people">Contacts</button>
@@ -263,6 +273,12 @@
         <div class="header-actions"><button class="btn small ghost" id="group-add-btn" onclick="createGroup()" style="display:none;">+ New Group</button><button class="btn small" onclick="openGearForm()">+ Add Gear</button></div></div>
       <div class="table-wrap"><table><thead><tr><th>Item</th><th>Detail</th><th>Qty</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody id="gear-table"></tbody></table></div>
     </section>
+
+    <section class="view" id="view-merch">
+      <div class="view-header"><div><div class="view-title display">Merch</div><div class="view-sub" id="merch-count">Loading…</div></div>
+        <div class="header-actions"><button class="btn small ghost" id="merch-group-add-btn" onclick="createMerchGroup()" style="display:none;">+ New Product</button><button class="btn small" id="merch-add-btn" onclick="openMerchForm()" style="display:none;">+ Add Merch</button></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Size</th><th>Colour</th><th>Qty</th><th>Location</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody id="merch-table"></tbody></table></div>
+    </section>
   </main>
 </div>
 
@@ -288,9 +304,11 @@ const sbPublic = supabase.createClient(PUBLIC_SITE_URL, PUBLIC_SITE_KEY);
 let currentProfile = null;
 let currentEmail = null;
 const collapsedGroups = new Set();
+const collapsedMerchGroups = new Set();
 let authMode = 'signin'; // 'signin' | 'signup'
 let map, mapMarkers = [];
-let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [], siteEvents: [] };
+let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [], siteEvents: [],
+  merch: [], merchGroups: [], merchEvents: [] };
 let artistsError = null;
 let siteEventsError = null;
 
@@ -361,6 +379,10 @@ async function onSignedIn(session) {
   document.getElementById('people-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
   document.getElementById('group-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
   document.getElementById('crew-add-btn').style.display = profile.role === 'core' ? 'block' : 'none';
+  // Merch writes are core-only in the database, so hide the buttons rather
+  // than let a member fill a form that cannot save.
+  document.getElementById('merch-group-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
+  document.getElementById('merch-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
   await loadAll();
 }
 
@@ -377,13 +399,16 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
 // ============ DATA LOADING ============
 async function loadAll() {
-  const [locRes, peopleRes, gearRes, datesRes, groupRes, eventRes] = await Promise.all([
+  const [locRes, peopleRes, gearRes, datesRes, groupRes, eventRes, merchRes, merchGroupRes, merchEventRes] = await Promise.all([
     sb.from('locations').select('*').order('name'),
     sb.from('people').select('*').order('name'),
     sb.from('gear').select('*').order('item'),
     sb.from('event_dates').select('*').order('month').order('day'),
     sb.from('gear_groups').select('*').order('name'),
     sb.from('gear_events').select('*').order('created_at', { ascending: false }).limit(1000),
+    sb.from('merch').select('*').order('name'),
+    sb.from('merch_groups').select('*').order('name'),
+    sb.from('merch_events').select('*').order('created_at', { ascending: false }).limit(1000),
   ]);
   cache.locations = locRes.data || [];
   cache.people = peopleRes.data || [];
@@ -391,6 +416,9 @@ async function loadAll() {
   cache.dates = datesRes.data || [];
   cache.groups = groupRes.data || [];
   cache.events = eventRes.data || [];
+  cache.merch = merchRes.data || [];
+  cache.merchGroups = merchGroupRes.data || [];
+  cache.merchEvents = merchEventRes.data || [];
 
   // Read outside the Promise.all above: this crosses into the public site's
   // project, and the Core Crew list must still render if that is unreachable.
@@ -429,6 +457,7 @@ async function loadAll() {
   renderArtistsTable();
   renderSiteEvents();
   renderGearTable();
+  renderMerchTable();
   renderDates();
   initMapIfNeeded();
   refreshMapMarkers();
@@ -1194,6 +1223,440 @@ async function deleteGear(id) {
   if (error) { toast(error.message, true); return; }
   toast('Gear deleted');
   await loadAll();
+}
+
+// ============ MERCH ============
+// The same shape as Gear: product families group colour/size variants, every
+// change lands in one timeline, and the stock count is derived from that log
+// rather than typed separately -- so the two can never disagree.
+function merchStatusLabel(v) {
+  return v === 'out' ? 'Out of stock' : v === 'low' ? 'Low' : 'Available';
+}
+
+function merchStatusClass(v) {
+  return v === 'out' ? 'status-warn' : v === 'low' ? 'status-neutral' : 'status-ok';
+}
+
+function merchGroupName(id) {
+  const g = cache.merchGroups.find(x => x.id === id);
+  return g ? g.name : null;
+}
+
+function money(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  return Number.isFinite(n) ? '₪' + (Math.round(n * 100) / 100) : '—';
+}
+
+// Only a literal hex value reaches the style attribute; anything else falls
+// back to the hatched "no colour" chip.
+function swatch(hex) {
+  const v = String(hex || '').trim();
+  if (!/^#[0-9a-f]{6}$/i.test(v)) return '<span class="swatch swatch-none" title="No colour"></span>';
+  return `<span class="swatch" style="background:${v}" title="${v}"></span>`;
+}
+
+// Stock is whatever the log says it is, so 0 reads as out and anything above
+// it clears that. A manual "Low" is left alone.
+function merchStatusForQty(qty, current) {
+  if ((qty || 0) <= 0) return 'out';
+  if (current === 'out') return 'available';
+  return current || 'available';
+}
+
+function merchRowHtml(m, canEdit) {
+  return `<tr><td>${m.name}</td><td>${m.size || '—'}</td><td>${swatch(m.color)}</td><td>${m.qty ?? 0}</td>
+    <td>${locName(m.location_id)}</td><td>${money(m.sale_price)}</td>
+    <td><span class="status-tag ${merchStatusClass(m.status)}">${merchStatusLabel(m.status)}</span></td>
+    <td><div class="row-actions"><button class="icon-btn" onclick='openMerchHistory(${JSON.stringify(m.id)})'>Log</button>${canEdit ? `<button class="icon-btn" onclick='openMerchForm(${JSON.stringify(m.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteMerch(${JSON.stringify(m.id)})'>Del</button>` : ''}</div></td></tr>`;
+}
+
+function renderMerchTable() {
+  const el = document.getElementById('merch-table');
+  if (!el) return;
+  const inStock = cache.merch.reduce((n, m) => n + (m.qty || 0), 0);
+  document.getElementById('merch-count').textContent =
+    `${cache.merch.length} line${cache.merch.length === 1 ? '' : 's'} in ${cache.merchGroups.length} product${cache.merchGroups.length === 1 ? '' : 's'} · ${inStock} in stock`;
+  const canEdit = currentProfile?.role === 'core';
+  const buckets = cache.merchGroups.map(grp => ({
+    id: grp.id,
+    name: grp.name,
+    locationId: grp.location_id || null,
+    real: true,
+    items: cache.merch.filter(m => m.group_id === grp.id),
+  }));
+  const loose = cache.merch.filter(m => !m.group_id);
+  if (loose.length) buckets.push({ id: '__none', name: 'Ungrouped', real: false, items: loose });
+
+  let html = '';
+  buckets.forEach(b => {
+    const open = !collapsedMerchGroups.has(b.id);
+    const stock = b.items.reduce((n, m) => n + (m.qty || 0), 0);
+    const actions = (canEdit && b.real)
+      ? `<span class="grp-actions"><button class="icon-btn" onclick='event.stopPropagation();openMerchGroupForm(${JSON.stringify(b.id)})'>Edit</button><button class="icon-btn" onclick='event.stopPropagation();ungroupAllMerch(${JSON.stringify(b.id)})'>Ungroup</button><button class="icon-btn danger" onclick='event.stopPropagation();deleteMerchGroupAndItems(${JSON.stringify(b.id)})'>Delete</button></span>`
+      : '';
+    const where = b.real ? locName(b.locationId) : null;
+    html += `<tr class="grp-row" onclick='toggleMerchGroup(${JSON.stringify(b.id)})'><td colspan="8">
+      <span class="grp-caret">${open ? '▾' : '▸'}</span>${b.name}
+      <span class="grp-count"> · ${b.items.length} line${b.items.length === 1 ? '' : 's'} · ${stock} in stock${where && where !== '—' ? ' · ' + where : ''}</span>${actions}</td></tr>`;
+    if (open) html += b.items.map(m => merchRowHtml(m, canEdit)).join('');
+  });
+  if (!buckets.length) html = '<tr><td colspan="8" class="empty">No merch yet.</td></tr>';
+  el.innerHTML = html;
+}
+
+function toggleMerchGroup(id) {
+  if (collapsedMerchGroups.has(id)) collapsedMerchGroups.delete(id); else collapsedMerchGroups.add(id);
+  renderMerchTable();
+}
+
+function createMerchGroup() { openMerchGroupForm(null); }
+
+function openMerchGroupForm(id) {
+  const grp = id ? cache.merchGroups.find(g => g.id === id) : null;
+  const count = id ? cache.merch.filter(m => m.group_id === id).length : 0;
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${grp?.location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+  showSlideover(`
+    <h2>${grp ? 'Edit' : 'New'} Product</h2>
+    <div class="form-row"><label class="field-label">Name</label><input id="f-mgrp-name" value="${escapeAttr(grp?.name || '')}" placeholder="T-Shirts"></div>
+    <div class="form-row"><label class="field-label">Stored at</label><select id="f-mgrp-loc"><option value="">— none —</option>${locOptions}</select></div>
+    <div class="form-row"><label class="field-label">Note</label><textarea id="f-mgrp-note" rows="2">${escapeAttr(grp?.note || '')}</textarea></div>
+    <div class="picker-hint">Setting a location moves every line in this product to it${count ? ` (${count} line${count === 1 ? '' : 's'})` : ''}, and logs the move against each one.</div>
+    <div class="form-actions"><button class="btn" onclick='saveMerchGroup(${JSON.stringify(id || null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+async function saveMerchGroup(id) {
+  const name = document.getElementById('f-mgrp-name').value.trim();
+  const locId = document.getElementById('f-mgrp-loc').value || null;
+  const note = document.getElementById('f-mgrp-note').value.trim() || null;
+  if (!name) { toast('Product name is required', true); return; }
+
+  let groupId = id;
+  const payload = { name, location_id: locId, note };
+  if (id) {
+    const { error } = await sb.from('merch_groups').update(payload).eq('id', id);
+    if (error) { toast(error.message, true); return; }
+  } else {
+    const { data, error } = await sb.from('merch_groups').insert(payload).select('id').single();
+    if (error) { toast(error.message, true); return; }
+    groupId = data?.id;
+  }
+
+  if (locId && groupId) {
+    const strays = cache.merch.filter(m => m.group_id === groupId && m.location_id !== locId);
+    if (strays.length) {
+      const { error } = await sb.from('merch').update({ location_id: locId }).eq('group_id', groupId);
+      if (error) { toast('Product saved, but moving its stock failed: ' + error.message, true); }
+      else {
+        for (const m of strays) {
+          await logMerchEvent({ merch_id: m.id, event_type: 'moved', from_location_id: m.location_id, to_location_id: locId,
+            note: `Moved with product "${name}": ${locName(m.location_id)} → ${locName(locId)}` });
+        }
+        toast(`Product saved · ${strays.length} line${strays.length === 1 ? '' : 's'} moved`);
+        closeSlideover();
+        await loadAll();
+        return;
+      }
+    }
+  }
+  toast('Product saved');
+  closeSlideover();
+  await loadAll();
+}
+
+// Drops the container, keeps the stock: the FK is ON DELETE SET NULL, so the
+// lines reappear under "Ungrouped".
+async function ungroupAllMerch(id) {
+  const grp = cache.merchGroups.find(g => g.id === id);
+  const count = cache.merch.filter(m => m.group_id === id).length;
+  if (!confirm(`Ungroup "${grp ? grp.name : ''}"?\n\nThe product is removed and its ${count} line${count === 1 ? '' : 's'} become Ungrouped. No stock is deleted.`)) return;
+  const { error } = await sb.from('merch_groups').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Product removed, stock kept');
+  await loadAll();
+}
+
+async function deleteMerchGroupAndItems(id) {
+  const grp = cache.merchGroups.find(g => g.id === id);
+  const items = cache.merch.filter(m => m.group_id === id);
+  if (!items.length) { await ungroupAllMerch(id); return; }
+  const names = items.slice(0, 8).map(m => ' · ' + m.name + (m.size ? ' (' + m.size + ')' : '')).join('\n');
+  const more = items.length > 8 ? `\n · …and ${items.length - 8} more` : '';
+  if (!confirm(`Delete "${grp ? grp.name : ''}" AND all ${items.length} lines in it?\n${names}${more}\n\nThis deletes the stock itself, along with its history. It cannot be undone.\n\nTo keep the stock and only remove the product, cancel and use Ungroup instead.`)) return;
+  const { error: mErr } = await sb.from('merch').delete().eq('group_id', id);
+  if (mErr) { toast(mErr.message, true); return; }
+  const { error } = await sb.from('merch_groups').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast(`Deleted product and ${items.length} line${items.length === 1 ? '' : 's'}`);
+  await loadAll();
+}
+
+function openMerchForm(id) {
+  const m = id ? cache.merch.find(x => x.id === id) : null;
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${m?.location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+  const groupOptions = cache.merchGroups.map(g => `<option value="${g.id}" ${m?.group_id === g.id ? 'selected' : ''}>${g.name}</option>`).join('');
+  const hex = /^#[0-9a-f]{6}$/i.test(String(m?.color || '')) ? m.color : '#1c1c1c';
+  showSlideover(`
+    <h2>${m ? 'Edit' : 'Add'} Merch</h2>
+    <div class="form-row"><label class="field-label">Item</label><input id="f-m-name" value="${escapeAttr(m?.name || '')}" placeholder="T-Shirt — Black"></div>
+    <div class="form-row"><label class="field-label">Detail</label><input id="f-m-meta" value="${escapeAttr(m?.meta || '')}" placeholder="Heavy cotton, screen print"></div>
+    <div class="form-row"><label class="field-label">Product</label><select id="f-m-group" onchange="adoptMerchGroupLocation()"><option value="">— Ungrouped —</option>${groupOptions}</select></div>
+    <div class="form-row"><label class="field-label">Size</label><input id="f-m-size" value="${escapeAttr(m?.size || '')}" placeholder="M — leave blank for one size"></div>
+    <div class="form-row"><label class="field-label">Colour</label>
+      <div class="color-row"><input id="f-m-colorpick" type="color" value="${hex}" oninput="syncMerchColor('pick')"><input id="f-m-color" value="${escapeAttr(m?.color || '')}" placeholder="#1c1c1c" oninput="syncMerchColor('text')"></div></div>
+    <div class="form-row"><label class="field-label">Qty in stock</label><input id="f-m-qty" type="number" min="0" value="${m?.qty ?? 0}"></div>
+    <div class="form-row"><label class="field-label">Stored at</label><select id="f-m-loc"><option value="">—</option>${locOptions}</select></div>
+    <div class="form-row"><label class="field-label">Cost to make</label><input id="f-m-cost" type="number" step="0.01" min="0" value="${m?.cost_price ?? ''}" placeholder="₪ per unit"></div>
+    <div class="form-row"><label class="field-label">Sale price</label><input id="f-m-price" type="number" step="0.01" min="0" value="${m?.sale_price ?? ''}" placeholder="₪ per unit"></div>
+    <div class="form-row"><label class="field-label">Status</label>
+      <select id="f-m-status"><option value="available" ${m?.status === 'available' || !m ? 'selected' : ''}>Available</option><option value="low" ${m?.status === 'low' ? 'selected' : ''}>Low</option><option value="out" ${m?.status === 'out' ? 'selected' : ''}>Out of stock</option></select></div>
+    <div class="form-row"><label class="field-label">Note</label><input id="f-m-note" value="${escapeAttr(m?.note || '')}"></div>
+    <div class="picker-hint">One line per colour and size. Day-to-day sales belong in the log, not here — they adjust the count for you.</div>
+    <div class="form-actions"><button class="btn" onclick='saveMerch(${JSON.stringify(id || null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+function syncMerchColor(src) {
+  const text = document.getElementById('f-m-color');
+  const pick = document.getElementById('f-m-colorpick');
+  if (!text || !pick) return;
+  if (src === 'pick') text.value = pick.value;
+  else if (/^#[0-9a-f]{6}$/i.test(text.value.trim())) pick.value = text.value.trim();
+}
+
+function adoptMerchGroupLocation() {
+  const groupSel = document.getElementById('f-m-group');
+  const locSel = document.getElementById('f-m-loc');
+  if (!groupSel || !locSel) return;
+  const grp = cache.merchGroups.find(g => g.id === groupSel.value);
+  if (grp && grp.location_id) locSel.value = grp.location_id;
+}
+
+async function logMerchEvent(entry) {
+  const { error } = await sb.from('merch_events').insert(Object.assign({ actor: currentEmail }, entry));
+  if (error) toast('Saved, but the log entry failed: ' + error.message, true);
+}
+
+function numOrNull(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function saveMerch(id) {
+  const newLocId = document.getElementById('f-m-loc').value || null;
+  const newGroupId = document.getElementById('f-m-group').value || null;
+  const payload = {
+    name: document.getElementById('f-m-name').value.trim(),
+    meta: document.getElementById('f-m-meta').value.trim() || null,
+    group_id: newGroupId,
+    size: document.getElementById('f-m-size').value.trim() || null,
+    color: document.getElementById('f-m-color').value.trim() || null,
+    qty: parseInt(document.getElementById('f-m-qty').value, 10) || 0,
+    location_id: newLocId,
+    cost_price: numOrNull(document.getElementById('f-m-cost').value),
+    sale_price: numOrNull(document.getElementById('f-m-price').value),
+    status: document.getElementById('f-m-status').value,
+    note: document.getElementById('f-m-note').value.trim() || null,
+  };
+  if (!payload.name) { toast('Item name is required', true); return; }
+  if (payload.qty < 0) { toast('Quantity cannot be negative', true); return; }
+
+  const existing = id ? cache.merch.find(x => x.id === id) : null;
+  let merchId = id;
+  if (id) {
+    const { error } = await sb.from('merch').update(payload).eq('id', id);
+    if (error) { toast(error.message, true); return; }
+  } else {
+    const { data, error } = await sb.from('merch').insert(payload).select('id').single();
+    if (error) { toast(error.message, true); return; }
+    merchId = data?.id;
+  }
+
+  if (merchId) {
+    if (!existing) {
+      await logMerchEvent({ merch_id: merchId, event_type: 'created', qty_change: payload.qty || null,
+        to_location_id: newLocId, to_status: payload.status, note: `Added "${payload.name}"` });
+    } else {
+      if (existing.location_id !== newLocId) {
+        await logMerchEvent({ merch_id: merchId, event_type: 'moved', from_location_id: existing.location_id, to_location_id: newLocId,
+          note: `${locName(existing.location_id)} → ${locName(newLocId)}` });
+      }
+      if (existing.status !== payload.status) {
+        await logMerchEvent({ merch_id: merchId, event_type: 'status', from_status: existing.status, to_status: payload.status,
+          note: `${merchStatusLabel(existing.status)} → ${merchStatusLabel(payload.status)}` });
+      }
+      if ((existing.qty ?? 0) !== payload.qty) {
+        await logMerchEvent({ merch_id: merchId, event_type: 'stock', qty_change: payload.qty - (existing.qty ?? 0),
+          note: `Count corrected ${existing.qty ?? 0} → ${payload.qty}` });
+      }
+      // Everything else collapses into one "edited" entry naming the fields,
+      // so the timeline stays readable instead of one line per column.
+      const changed = [];
+      if (existing.name !== payload.name) changed.push('name');
+      if ((existing.meta || null) !== payload.meta) changed.push('detail');
+      if ((existing.size || null) !== payload.size) changed.push(`size ${existing.size || '—'} → ${payload.size || '—'}`);
+      if ((existing.color || null) !== payload.color) changed.push('colour');
+      if (Number(existing.cost_price ?? NaN) !== Number(payload.cost_price ?? NaN)) changed.push(`cost ${money(existing.cost_price)} → ${money(payload.cost_price)}`);
+      if (Number(existing.sale_price ?? NaN) !== Number(payload.sale_price ?? NaN)) changed.push(`price ${money(existing.sale_price)} → ${money(payload.sale_price)}`);
+      if ((existing.note || null) !== payload.note) changed.push('note');
+      if ((existing.group_id || null) !== newGroupId) changed.push(`product ${merchGroupName(existing.group_id) || 'Ungrouped'} → ${merchGroupName(newGroupId) || 'Ungrouped'}`);
+      if (changed.length) {
+        await logMerchEvent({ merch_id: merchId, event_type: 'edited', note: 'Changed ' + changed.join(', ') });
+      }
+    }
+  }
+  toast('Merch saved');
+  closeSlideover();
+  await loadAll();
+}
+
+async function deleteMerch(id) {
+  if (!confirm('Delete this merch line? Its history goes with it. This cannot be undone.')) return;
+  const { error } = await sb.from('merch').delete().eq('id', id);
+  if (error) { toast(error.message, true); return; }
+  toast('Merch deleted');
+  await loadAll();
+}
+
+const MERCH_EVENT_TYPES = [
+  { value: 'sold',     label: 'Sold' },
+  { value: 'made',     label: 'Made / restocked' },
+  { value: 'gifted',   label: 'Gifted / given away' },
+  { value: 'returned', label: 'Returned' },
+  { value: 'stock',    label: 'Stock count' },
+  { value: 'moved',    label: 'Moved' },
+  { value: 'note',     label: 'Note' },
+];
+
+function openMerchHistory(id) {
+  const m = cache.merch.find(x => x.id === id);
+  if (!m) return;
+  const canEdit = currentProfile?.role === 'core';
+  const events = cache.merchEvents.filter(e => e.merch_id === id);
+  const locOptions = cache.locations.map(l => `<option value="${l.id}" ${m.location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+  const sold = events.filter(e => e.event_type === 'sold');
+  const soldUnits = sold.reduce((n, e) => n + Math.abs(e.qty_change || 0), 0);
+  const revenue = sold.reduce((n, e) => n + Math.abs(e.qty_change || 0) * Number(e.unit_price || 0), 0);
+
+  const timeline = events.length ? events.map(e => {
+    const bits = [];
+    if (e.note) bits.push(e.note);
+    if (!e.note && e.event_type === 'moved') bits.push(`${locName(e.from_location_id)} → ${locName(e.to_location_id)}`);
+    const q = e.qty_change ? `${e.qty_change > 0 ? '+' : ''}${e.qty_change}` : '';
+    return `<div class="tl-item ${e.event_type}">
+      <span class="tl-type">${e.event_type}</span> ${q ? `<span class="tl-type">${q}</span> ` : ''}<span class="tl-when">${whenLabel(e.created_at)}</span>
+      ${bits.length ? `<div class="tl-body">${bits.join('<br>')}</div>` : ''}
+      ${e.actor ? `<div class="tl-actor">${e.actor}</div>` : ''}
+    </div>`;
+  }).join('') : '<p class="empty">Nothing logged yet.</p>';
+
+  showSlideover(`
+    <h2>${m.name}${m.size ? ' · ' + m.size : ''}</h2>
+    <div class="side-row"><span class="side-label">Product</span><span>${merchGroupName(m.group_id) || 'Ungrouped'}</span></div>
+    <div class="side-row"><span class="side-label">In stock</span><span>${m.qty ?? 0}</span></div>
+    <div class="side-row"><span class="side-label">Stored at</span><span>${locName(m.location_id)}</span></div>
+    <div class="side-row"><span class="side-label">Price</span><span>${money(m.sale_price)}${m.cost_price ? ' (cost ' + money(m.cost_price) + ')' : ''}</span></div>
+    <div class="side-row"><span class="side-label">Sold to date</span><span>${soldUnits}${revenue ? ' · ' + money(revenue) : ''}</span></div>
+    ${canEdit ? `
+      <h3 style="margin-top:18px;font-family:var(--font-display);font-size:13px;color:var(--amber);">Log an entry</h3>
+      <div class="form-row"><label class="field-label">Type</label>
+        <select id="f-mev-type" onchange="toggleMerchEventFields()">
+          ${MERCH_EVENT_TYPES.map(t => `<option value="${t.value}">${t.label}</option>`).join('')}
+        </select></div>
+      <div class="form-row" id="mev-qty-row"><label class="field-label">How many</label><input id="f-mev-qty" type="number" min="0" value="1"></div>
+      <div class="form-row" id="mev-price-row"><label class="field-label">Price each</label><input id="f-mev-price" type="number" step="0.01" min="0" value="${m.sale_price ?? ''}" placeholder="₪ per unit"></div>
+      <div class="form-row" id="mev-loc-row" style="display:none;"><label class="field-label">Moved to</label>
+        <select id="f-mev-loc"><option value="">—</option>${locOptions}</select></div>
+      <div class="form-row"><label class="field-label">Note</label><textarea id="f-mev-note" rows="2" placeholder="Who, where, why — optional"></textarea></div>
+      <div class="picker-hint">Logging a sale takes it off the count. The stock figure always matches this list.</div>
+      <div class="form-actions"><button class="btn" onclick='addMerchEvent(${JSON.stringify(id)})'>Add to log</button></div>
+    ` : ''}
+    <h3 style="margin-top:18px;font-family:var(--font-display);font-size:13px;color:var(--amber);">History (${events.length})</h3>
+    <div class="timeline">${timeline}</div>
+  `);
+}
+
+function toggleMerchEventFields() {
+  const type = document.getElementById('f-mev-type').value;
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'block' : 'none'; };
+  show('mev-qty-row', ['sold', 'made', 'gifted', 'returned', 'stock'].includes(type));
+  show('mev-price-row', type === 'sold');
+  show('mev-loc-row', type === 'moved');
+  const qty = document.getElementById('f-mev-qty');
+  const label = document.querySelector('#mev-qty-row .field-label');
+  if (label) label.textContent = type === 'stock' ? 'Counted total' : 'How many';
+  if (qty && type === 'stock') qty.value = qty.value;
+}
+
+// A logged movement is the real thing, so the row follows it: sales and gifts
+// take stock off, restocks and returns put it back, and a count sets it
+// outright. Nothing here lets the number and the log drift apart.
+async function addMerchEvent(id) {
+  const m = cache.merch.find(x => x.id === id);
+  if (!m) return;
+  const type = document.getElementById('f-mev-type').value;
+  let note = document.getElementById('f-mev-note').value.trim() || null;
+  const have = m.qty || 0;
+  const n = parseInt(document.getElementById('f-mev-qty').value, 10);
+  const price = numOrNull(document.getElementById('f-mev-price').value);
+
+  const entry = { merch_id: id, event_type: type, note };
+  let newQty = null;
+
+  if (type === 'made' || type === 'returned') {
+    if (!Number.isFinite(n) || n <= 0) { toast('Enter how many', true); return; }
+    entry.qty_change = n;
+    newQty = have + n;
+    if (!note) entry.note = `${type === 'made' ? 'Restocked' : 'Returned'} ${n}`;
+  } else if (type === 'sold' || type === 'gifted') {
+    if (!Number.isFinite(n) || n <= 0) { toast('Enter how many', true); return; }
+    if (n > have) { toast(`Only ${have} in stock`, true); return; }
+    entry.qty_change = -n;
+    newQty = have - n;
+    if (type === 'sold' && price !== null) entry.unit_price = price;
+    if (!note) entry.note = type === 'sold'
+      ? `Sold ${n}${price !== null ? ' × ' + money(price) + ' = ' + money(n * price) : ''}`
+      : `Gave away ${n}`;
+  } else if (type === 'stock') {
+    if (!Number.isFinite(n) || n < 0) { toast('Enter the counted total', true); return; }
+    entry.qty_change = n - have;
+    newQty = n;
+    if (!note) entry.note = `Counted ${n} (was ${have})`;
+  } else if (type === 'moved') {
+    const toLoc = document.getElementById('f-mev-loc').value || null;
+    entry.from_location_id = m.location_id;
+    entry.to_location_id = toLoc;
+    if (!note) entry.note = `${locName(m.location_id)} → ${locName(toLoc)}`;
+  } else if (!note) {
+    toast('Add a note describing what happened', true);
+    return;
+  }
+
+  const { error } = await sb.from('merch_events').insert(Object.assign({ actor: currentEmail }, entry));
+  if (error) { toast(error.message, true); return; }
+
+  const update = {};
+  if (newQty !== null) {
+    update.qty = newQty;
+    const nextStatus = merchStatusForQty(newQty, m.status);
+    if (nextStatus !== m.status) update.status = nextStatus;
+  }
+  if (type === 'moved') update.location_id = entry.to_location_id;
+
+  if (Object.keys(update).length) {
+    const { error: upErr } = await sb.from('merch').update(update).eq('id', id);
+    if (upErr) { toast('Logged, but updating the item failed: ' + upErr.message, true); }
+    else if (update.status) {
+      await logMerchEvent({ merch_id: id, event_type: 'status', from_status: m.status, to_status: update.status,
+        note: `${merchStatusLabel(m.status)} → ${merchStatusLabel(update.status)}` });
+    }
+  }
+  toast('Logged');
+  await loadAll();
+  openMerchHistory(id);
 }
 
 // ============ DATES ============
