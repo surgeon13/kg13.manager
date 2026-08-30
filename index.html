@@ -246,11 +246,12 @@
   <nav>
     <button class="nav-item active" data-view="crew">Core Crew</button>
     <button class="nav-item" data-view="gear">Gear</button>
-    <button class="nav-item" data-view="merch">Merch</button>
     <button class="nav-item" data-view="map">Map</button>
+    <button class="nav-item" data-view="events">Events</button>
     <button class="nav-item" data-view="locations">Locations</button>
     <button class="nav-item" data-view="people">Contacts</button>
     <button class="nav-item" data-view="dates">Dates</button>
+    <button class="nav-item" data-view="merch">Merch</button>
     <button class="nav-item" id="nav-bin" data-view="bin" style="display:none;">Bin</button>
   </nav>
   <main>
@@ -310,6 +311,12 @@
       <div class="table-wrap"><table><thead><tr><th>Item</th><th>Size</th><th>Colour</th><th>Qty</th><th>Location</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody id="merch-table"></tbody></table></div>
     </section>
 
+    <section class="view" id="view-events">
+      <div class="view-header"><div><div class="view-title display">Events</div><div class="view-sub" id="events-count">Loading…</div></div>
+        <button class="btn small" id="event-add-btn" onclick="openEventForm()" style="display:none;">+ Add Event</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Time</th><th>Where</th><th>Status</th><th>Note</th><th></th></tr></thead><tbody id="events-table"></tbody></table></div>
+    </section>
+
     <section class="view" id="view-bin">
       <div class="view-header"><div><div class="view-title display">Bin</div><div class="view-sub" id="bin-count">Loading…</div></div>
         <button class="btn small ghost" id="bin-empty-btn" onclick="clearBin()">Clear bin</button></div>
@@ -345,7 +352,7 @@ const collapsedMerchGroups = new Set();
 let authMode = 'signin'; // 'signin' | 'signup'
 let map, mapMarkers = [];
 let cache = { locations: [], people: [], gear: [], dates: [], history: [], groups: [], events: [], artists: [], siteEvents: [],
-  merch: [], merchGroups: [], merchEvents: [], bin: [] };
+  merch: [], merchGroups: [], merchEvents: [], bin: [], events: [] };
 let artistsError = null;
 let siteEventsError = null;
 
@@ -422,6 +429,7 @@ async function onSignedIn(session) {
   document.getElementById('merch-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
   // The Bin is a Core Crew tool: it exposes what was removed and undoes it.
   document.getElementById('nav-bin').style.display = profile.role === 'core' ? 'block' : 'none';
+  document.getElementById('event-add-btn').style.display = profile.role === 'core' ? 'inline-block' : 'none';
   await loadAll();
 }
 
@@ -438,7 +446,8 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
 // ============ DATA LOADING ============
 async function loadAll() {
-  const [locRes, peopleRes, gearRes, datesRes, groupRes, eventRes, merchRes, merchGroupRes, merchEventRes] = await Promise.all([
+  const [locRes, peopleRes, gearRes, datesRes, groupRes, eventRes, merchRes, merchGroupRes, merchEventRes,
+         ourEventsRes] = await Promise.all([
     // deleted_at is null everywhere: a binned record must disappear from every
     // list, count, map pin and picker, and filtering at load does that once
     // rather than in each renderer.
@@ -451,6 +460,7 @@ async function loadAll() {
     sb.from('merch').select('*').is('deleted_at', null).order('name'),
     sb.from('merch_groups').select('*').is('deleted_at', null).order('name'),
     sb.from('merch_events').select('*').order('created_at', { ascending: false }).limit(1000),
+    sb.from('events').select('*').is('deleted_at', null).order('event_date'),
   ]);
   cache.locations = locRes.data || [];
   cache.people = peopleRes.data || [];
@@ -461,6 +471,7 @@ async function loadAll() {
   cache.merch = merchRes.data || [];
   cache.merchGroups = merchGroupRes.data || [];
   cache.merchEvents = merchEventRes.data || [];
+  cache.events = ourEventsRes.data || [];
 
   // Read outside the Promise.all above: this crosses into the public site's
   // project, and the Core Crew list must still render if that is unreachable.
@@ -501,6 +512,7 @@ async function loadAll() {
   await loadBin();
   renderGearTable();
   renderMerchTable();
+  renderOurEvents();
   renderDates();
   renderBin();
   initMapIfNeeded();
@@ -1767,6 +1779,172 @@ async function addMerchEvent(id) {
   openMerchHistory(id);
 }
 
+// ============ EVENTS ============
+// KG13's own gigs, planned against its own locations. Distinct from the public
+// events mirrored from kg13tlv.com further down the Dates tab: those live in
+// the site's project, which this app can read but not write.
+const EVENT_STATUSES = [
+  { value: 'planned',   label: 'Planned' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'done',      label: 'Done' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+function eventStatusLabel(v) {
+  const s = EVENT_STATUSES.find(x => x.value === v);
+  return s ? s.label : 'Planned';
+}
+
+function eventStatusClass(v) {
+  if (v === 'cancelled') return 'status-warn';
+  if (v === 'confirmed') return 'status-ok';
+  return 'status-neutral';
+}
+
+function eventDateLabel(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = String(iso).split('-');
+  return `${d}.${m}.${y}`;
+}
+
+function timeLabel(t) {
+  return t ? String(t).slice(0, 5) : '—';
+}
+
+// Today in the browser's own timezone. Using toISOString here would shift the
+// date backwards for anyone east of UTC, which is everyone in Tel Aviv.
+function todayISO() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function renderOurEvents() {
+  const el = document.getElementById('events-table');
+  if (!el) return;
+  const canEdit = currentProfile?.role === 'core';
+  const today = todayISO();
+  const upcoming = cache.events.filter(e => e.event_date >= today).length;
+  document.getElementById('events-count').textContent =
+    `${cache.events.length} event${cache.events.length === 1 ? '' : 's'} · ${upcoming} upcoming`;
+
+  if (!cache.events.length) {
+    el.innerHTML = '<tr><td colspan="7" class="empty">No events yet. Add one, or generate one from a fixed date.</td></tr>';
+    return;
+  }
+  el.innerHTML = cache.events.map(e => {
+    const past = e.event_date < today;
+    return `<tr${past ? ' style="opacity:.55;"' : ''}>
+      <td>${eventDateLabel(e.event_date)}</td>
+      <td>${e.name}</td>
+      <td>${timeLabel(e.start_time)}</td>
+      <td>${locName(e.location_id)}</td>
+      <td><span class="status-tag ${eventStatusClass(e.status)}">${eventStatusLabel(e.status)}</span></td>
+      <td>${e.note || ''}</td>
+      <td><div class="row-actions">${canEdit
+        ? `<button class="icon-btn" onclick='openEventForm(${JSON.stringify(e.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteEvent(${JSON.stringify(e.id)})'>Del</button>`
+        : ''}</div></td></tr>`;
+  }).join('');
+}
+
+// `seed` pre-fills the form from a fixed date without creating anything yet, so
+// generating an event from a date is still reviewed before it is saved.
+function openEventForm(id, seed) {
+  const e = id ? cache.events.find(x => x.id === id) : null;
+  const src = e || seed || {};
+  const locOptions = cache.locations.map(l =>
+    `<option value="${l.id}" ${src.location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('');
+  const fromDate = src.event_date_id ? cache.dates.find(d => d.id === src.event_date_id) : null;
+  showSlideover(`
+    <h2>${e ? 'Edit' : 'New'} Event</h2>
+    ${fromDate ? `<div class="picker-hint">Generated from the fixed date ${String(fromDate.day).padStart(2, '0')}.${String(fromDate.month).padStart(2, '0')}${fromDate.description ? ' — ' + escapeAttr(fromDate.description) : ''}.</div>` : ''}
+    <div class="form-row"><label class="field-label">Name</label><input id="f-ev-name" value="${escapeAttr(src.name || '')}" placeholder="Acid night at the farm"></div>
+    <div class="form-row"><label class="field-label">Date</label><input id="f-ev-date" type="date" value="${escapeAttr(src.event_date || '')}"></div>
+    <div class="form-row"><label class="field-label">Start time</label><input id="f-ev-time" type="time" value="${escapeAttr(src.start_time ? String(src.start_time).slice(0, 5) : '')}"></div>
+    <div class="form-row"><label class="field-label">Where</label><select id="f-ev-loc"><option value="">—</option>${locOptions}</select></div>
+    <div class="form-row"><label class="field-label">Status</label>
+      <select id="f-ev-status">${EVENT_STATUSES.map(s =>
+        `<option value="${s.value}" ${(src.status || 'planned') === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}</select></div>
+    <div class="form-row"><label class="field-label">Note</label><textarea id="f-ev-note" rows="3">${escapeAttr(src.note || '')}</textarea></div>
+    <div class="form-actions"><button class="btn" onclick='saveEvent(${JSON.stringify(id || null)}, ${JSON.stringify(src.event_date_id || null)})'>Save</button><button class="btn ghost" onclick="closeSlideover()">Cancel</button></div>
+  `);
+}
+
+async function saveEvent(id, eventDateId) {
+  const payload = {
+    name: document.getElementById('f-ev-name').value.trim(),
+    event_date: document.getElementById('f-ev-date').value || null,
+    start_time: document.getElementById('f-ev-time').value || null,
+    location_id: document.getElementById('f-ev-loc').value || null,
+    status: document.getElementById('f-ev-status').value,
+    note: document.getElementById('f-ev-note').value.trim() || null,
+  };
+  if (!payload.name) { toast('Event name is required', true); return; }
+  if (!payload.event_date) { toast('Pick a date', true); return; }
+  if (!id) payload.event_date_id = eventDateId || null;
+
+  const { error } = id
+    ? await sb.from('events').update(payload).eq('id', id)
+    : await sb.from('events').insert(payload);
+  if (error) { toast(error.message, true); return; }
+  toast('Event saved');
+  closeSlideover();
+  await loadAll();
+}
+
+async function deleteEvent(id) {
+  if (!confirm('Delete this event?\n\nIt moves to the Bin and can be restored from there.')) return;
+  const error = await softDelete('events', { id });
+  if (error) { toast(error.message, true); return; }
+  toast('Event moved to the Bin');
+  await loadAll();
+}
+
+function isRealDate(y, m, d) {
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+function lastDayOfMonth(y, m) {
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+// A fixed date is a day and a month with no year, so turning one into an event
+// means choosing which year. The next occurrence is the useful default: if this
+// year's has already passed, it means next year's.
+//
+// 29 February only exists in leap years, so it advances to the next one rather
+// than producing a date the database would reject. The search is bounded --
+// the longest gap between leap years is eight, under the century rule -- and a
+// day that exists in no year at all (someone typing 31 in a 30-day month) is
+// clamped to the end of the month instead of looping forever.
+function nextOccurrence(day, month, from) {
+  const today = from || todayISO();
+  const [ty, tm, td] = today.split('-').map(Number);
+  let year = (month < tm || (month === tm && day < td)) ? ty + 1 : ty;
+  const startYear = year;
+  for (let i = 0; i < 8 && !isRealDate(year, month, day); i++) year += 1;
+  // No year has this day at all, so the search found nothing: clamp within the
+  // year we started from rather than drifting eight years into the future.
+  if (!isRealDate(year, month, day)) year = startYear;
+  const d = isRealDate(year, month, day) ? day : lastDayOfMonth(year, month);
+  return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+// Opens the event form seeded from the date rather than inserting straight
+// away, so the name and time can be set before anything is saved.
+function eventFromDate(dateId) {
+  const d = cache.dates.find(x => x.id === dateId);
+  if (!d) return;
+  openEventForm(null, {
+    name: d.description || '',
+    event_date: nextOccurrence(d.day, d.month),
+    location_id: d.location_id || null,
+    status: 'planned',
+    event_date_id: d.id,
+  });
+}
+
 // ============ DATES ============
 // Read-only mirror of the public site's event calendar. Those are one-off
 // dated gigs; the strip above is recurring annual dates, so they sit together
@@ -1796,7 +1974,7 @@ function renderDates() {
       <div class="dm display">${String(d.day).padStart(2,'0')}.${String(d.month).padStart(2,'0')}</div>
       <div class="desc">${d.description || ''}</div>
       ${d.location_id ? `<div class="desc" style="color:var(--amber-dim);">@ ${locName(d.location_id)}</div>` : ''}
-      <div class="row-actions"><button class="icon-btn" onclick='openDateForm(${JSON.stringify(d.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteDate(${JSON.stringify(d.id)})'>Del</button></div>
+      <div class="row-actions"><button class="icon-btn" onclick='eventFromDate(${JSON.stringify(d.id)})' title="Generate an event from this date">Make event</button><button class="icon-btn" onclick='openDateForm(${JSON.stringify(d.id)})'>Edit</button><button class="icon-btn danger" onclick='deleteDate(${JSON.stringify(d.id)})'>Del</button></div>
     </div>`).join('');
 }
 
@@ -1851,6 +2029,8 @@ const BIN_KINDS = [
   { table: 'merch',        label: 'Merch', title: r => r.name,
     detail: r => [r.size, r.meta].filter(Boolean).join(' · ') },
   { table: 'merch_groups', label: 'Merch product', title: r => r.name, detail: r => r.note || '' },
+  { table: 'events',       label: 'Event', title: r => r.name,
+    detail: r => [r.event_date, r.start_time ? r.start_time.slice(0, 5) : null].filter(Boolean).join(' · ') },
   { table: 'event_dates',  label: 'Date',
     title: r => `${String(r.day).padStart(2, '0')}.${String(r.month).padStart(2, '0')}`,
     detail: r => r.description || '' },
